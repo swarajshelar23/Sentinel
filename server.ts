@@ -69,16 +69,20 @@ async function startServer() {
       // VirusTotal Lookup (Optional)
       let vtResults = null;
       let vtMaliciousCount = 0;
-      if (process.env.VIRUSTOTAL_API_KEY) {
+      const vtKey = process.env.VIRUSTOTAL_API_KEY;
+      
+      if (vtKey && vtKey.length > 10 && !vtKey.includes('YOUR_')) {
         try {
           const vtResponse = await axios.get(`https://www.virustotal.com/api/v3/files/${features.hash_sha256}`, {
-            headers: { 'x-apikey': process.env.VIRUSTOTAL_API_KEY }
+            headers: { 'x-apikey': vtKey }
           });
           vtResults = vtResponse.data;
           vtMaliciousCount = vtResults.data?.attributes?.last_analysis_stats?.malicious || 0;
         } catch (err: any) {
           if (err.response?.status === 404) {
             console.log(`VT: File ${features.hash_sha256} not found in database (normal for new files)`);
+          } else if (err.response?.status === 401) {
+            console.warn("VT: Invalid API Key (401). Please check your VIRUSTOTAL_API_KEY.");
           } else {
             console.error("VT lookup error:", err.message);
           }
