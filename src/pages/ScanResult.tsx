@@ -85,10 +85,28 @@ export default function ScanResult() {
               </div>
               <div>
                 <p className="font-mono text-[10px] uppercase opacity-50">Detection_Engine</p>
-                <p className="font-bold">SENTINEL_STATIC_v1.0</p>
+                <p className="font-bold">SENTINEL_AI_v2.0</p>
               </div>
             </div>
           </div>
+
+          {features.ai_probability !== undefined && (
+            <div className="mb-8 p-4 border border-[#141414] bg-gray-50">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="font-mono font-bold text-xs uppercase">AI_Malware_Probability</h4>
+                <span className={`font-mono text-xs font-bold ${features.ai_probability > 0.5 ? 'text-red-600' : 'text-green-600'}`}>
+                  {features.ai_prediction?.toUpperCase()}
+                </span>
+              </div>
+              <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-1000 ${features.ai_probability > 0.7 ? 'bg-red-700' : features.ai_probability > 0.4 ? 'bg-yellow-500' : 'bg-green-600'}`}
+                  style={{ width: `${features.ai_probability * 100}%` }}
+                />
+              </div>
+              <p className="font-mono text-[10px] mt-1 text-right opacity-50">CONFIDENCE_SCORE: {(features.ai_probability * 100).toFixed(2)}%</p>
+            </div>
+          )}
 
           <div className="space-y-4">
             <h4 className="font-mono font-bold text-xs uppercase border-l-4 border-[#141414] pl-2">Analysis_Findings</h4>

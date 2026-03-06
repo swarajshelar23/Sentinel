@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  sentinel-scanner:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=your-secure-secret-here
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}
+    volumes:
+      - ./malware_scanner.db:/app/malware_scanner.db
+      - ./uploads:/app/uploads
+    restart: always

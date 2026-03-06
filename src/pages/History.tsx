@@ -102,7 +102,26 @@ export default function History() {
               <div className="col-span-1 text-right">
                 <Link 
                   to={`/scan/${scan.id}`} 
-                  state={{ scanData: { features: { ...JSON.parse(scan.metadata), filename: scan.filename, filesize: scan.filesize, hash_sha256: scan.hash_sha256, entropy: scan.entropy, yara_matches: JSON.parse(scan.yara_matches) }, report: { score: scan.threat_score, classification: scan.classification, details: [] }, vtResults: JSON.parse(scan.vt_results) } }}
+                  state={{ 
+                    scanData: { 
+                      features: { 
+                        ...JSON.parse(scan.metadata), 
+                        filename: scan.filename, 
+                        filesize: scan.filesize, 
+                        hash_sha256: scan.hash_sha256, 
+                        entropy: scan.entropy, 
+                        yara_matches: JSON.parse(scan.yara_matches),
+                        ai_probability: scan.ai_probability,
+                        ai_prediction: scan.ai_prediction
+                      }, 
+                      report: { 
+                        score: scan.threat_score, 
+                        classification: scan.classification, 
+                        details: [] 
+                      }, 
+                      vtResults: JSON.parse(scan.vt_results) 
+                    } 
+                  }}
                   className="inline-flex items-center justify-center w-8 h-8 border border-[#141414] hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
                 >
                   <ChevronRight className="w-4 h-4" />

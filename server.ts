@@ -6,7 +6,7 @@ import multer from "multer";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import db from "./src/lib/db.js";
-import { performScan, calculateThreatScore } from "./src/lib/scanner.js";
+import { performScan, calculateThreatScore, getAiPrediction } from "./src/lib/scanner.js";
 import axios from "axios";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-malware-scanner-key";
@@ -68,23 +68,34 @@ async function startServer() {
       
       // VirusTotal Lookup (Optional)
       let vtResults = null;
+      let vtMaliciousCount = 0;
       if (process.env.VIRUSTOTAL_API_KEY) {
         try {
           const vtResponse = await axios.get(`https://www.virustotal.com/api/v3/files/${features.hash_sha256}`, {
             headers: { 'x-apikey': process.env.VIRUSTOTAL_API_KEY }
           });
           vtResults = vtResponse.data;
-        } catch (err) {
-          console.log("VT lookup failed (likely not found or rate limit)");
+          vtMaliciousCount = vtResults.data?.attributes?.last_analysis_stats?.malicious || 0;
+        } catch (err: any) {
+          if (err.response?.status === 404) {
+            console.log(`VT: File ${features.hash_sha256} not found in database (normal for new files)`);
+          } else {
+            console.error("VT lookup error:", err.message);
+          }
         }
       }
+
+      // AI Prediction
+      const aiResult = getAiPrediction(req.file.path, features, vtMaliciousCount);
+      features.ai_probability = aiResult.probability;
+      features.ai_prediction = aiResult.prediction;
 
       const report = calculateThreatScore(features, vtResults);
 
       // Store in DB
       const scanId = db.prepare(`
-        INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata, ai_probability, ai_prediction)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         req.user.id,
         features.filename,
@@ -95,13 +106,17 @@ async function startServer() {
         report.classification,
         JSON.stringify(vtResults),
         JSON.stringify(features.yara_matches),
-        JSON.stringify(features.metadata)
+        JSON.stringify(features.metadata),
+        features.ai_probability,
+        features.ai_prediction
       ).lastInsertRowid;
 
       // Cleanup
-      fs.unlinkSync(req.file.path);
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
-      res.json({ id: scanId, features, report });
+      res.json({ id: scanId, features, report, vtResults });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Scan failed" });

@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { execSync } from 'child_process';
+import path from 'path';
 
 export interface ScanFeatures {
   filename: string;
@@ -8,6 +10,8 @@ export interface ScanFeatures {
   entropy: number;
   yara_matches: string[];
   metadata: Record<string, any>;
+  ai_probability?: number;
+  ai_prediction?: string;
 }
 
 export interface ScanResult {
@@ -18,7 +22,6 @@ export interface ScanResult {
 
 /**
  * Calculates Shannon Entropy of a buffer.
- * Higher entropy (close to 8) suggests encryption or packing.
  */
 export function calculateEntropy(buffer: Buffer): number {
   if (buffer.length === 0) return 0;
@@ -40,10 +43,10 @@ export function calculateEntropy(buffer: Buffer): number {
 export function scanSignatures(buffer: Buffer): string[] {
   const matches: string[] = [];
   const signatures = [
-    { name: 'Suspicious_Shellcode', pattern: Buffer.from([0xeb, 0xfe]) }, // JMP $
+    { name: 'Suspicious_Shellcode', pattern: Buffer.from([0xeb, 0xfe]) },
     { name: 'Potential_Ransomware_Note', pattern: Buffer.from('YOUR FILES HAVE BEEN ENCRYPTED') },
     { name: 'Reverse_Shell_Pattern', pattern: Buffer.from('/bin/sh -i') },
-    { name: 'Crypto_Stealer_Pattern', pattern: Buffer.from('0x[a-fA-F0-9]{40}') }, // Ethereum address pattern
+    { name: 'Crypto_Stealer_Pattern', pattern: Buffer.from('0x[a-fA-F0-9]{40}') },
   ];
 
   for (const sig of signatures) {
@@ -55,40 +58,70 @@ export function scanSignatures(buffer: Buffer): string[] {
 }
 
 /**
- * Threat Scoring Engine
+ * Calls the Python AI Engine for prediction.
+ */
+export function getAiPrediction(filePath: string, features: ScanFeatures, vtMaliciousCount: number = 0): { probability: number; prediction: string } {
+  try {
+    const extension = path.extname(features.filename).toLowerCase();
+    const extMap: Record<string, number> = { '.exe': 1, '.dll': 1, '.bin': 1, '.sh': 2, '.py': 2, '.js': 2, '.doc': 3, '.pdf': 3 };
+    
+    const suspiciousKeywords = ['eval', 'exec', 'system', 'shell_exec', 'powershell', 'cmd.exe', 'http', 'https'];
+    const buffer = fs.readFileSync(filePath); 
+    const content = buffer.toString('utf8');
+    const suspiciousCount = suspiciousKeywords.reduce((acc, kw) => acc + (content.includes(kw) ? 1 : 0), 0);
+
+    const pythonFeatures = {
+      file_size: features.filesize,
+      entropy: features.entropy,
+      extension_type: extMap[extension] || 0,
+      suspicious_strings: suspiciousCount,
+      yara_matches: features.yara_matches.length,
+      vt_reputation: vtMaliciousCount
+    };
+
+    const scriptPath = path.resolve('ai-engine', 'predict.py');
+    const command = `python3 "${scriptPath}" '${JSON.stringify(pythonFeatures)}'`;
+    const output = execSync(command, { encoding: 'utf8' });
+    return JSON.parse(output);
+  } catch (err) {
+    console.error('AI Engine failed, using fallback:', err);
+    return { probability: 0.5, prediction: 'Unknown' };
+  }
+}
+
+/**
+ * Threat Scoring Engine (Updated with AI)
  */
 export function calculateThreatScore(features: ScanFeatures, vtResults?: any): ScanResult {
   let score = 0;
   const details: string[] = [];
 
-  // 1. Entropy Analysis
+  // 1. Entropy Analysis (20% weight)
   if (features.entropy > 7.2) {
-    score += 30;
+    score += 20;
     details.push('High entropy detected (potential packing/encryption)');
-  } else if (features.entropy > 6.5) {
-    score += 15;
-    details.push('Moderate entropy detected');
   }
 
-  // 2. YARA/Signature Matches
+  // 2. YARA/Signature Matches (30% weight)
   if (features.yara_matches.length > 0) {
-    score += features.yara_matches.length * 25;
+    score += Math.min(features.yara_matches.length * 15, 30);
     details.push(`Signature matches: ${features.yara_matches.join(', ')}`);
   }
 
-  // 3. File Size/Type Anomalies (Simple)
-  if (features.filename.endsWith('.exe') || features.filename.endsWith('.dll')) {
-    score += 10;
-    details.push('Executable file type (higher inherent risk)');
-  }
-
-  // 4. VirusTotal Reputation (Simulated or Real)
+  // 3. VirusTotal Reputation (25% weight)
   if (vtResults) {
     const maliciousCount = vtResults.data?.attributes?.last_analysis_stats?.malicious || 0;
     if (maliciousCount > 0) {
-      score += maliciousCount * 10;
+      score += Math.min(maliciousCount * 5, 25);
       details.push(`VirusTotal: ${maliciousCount} engines flagged this file`);
     }
+  }
+
+  // 4. AI Model Probability (25% weight)
+  if (features.ai_probability !== undefined) {
+    const aiImpact = Math.round(features.ai_probability * 25);
+    score += aiImpact;
+    details.push(`AI Classifier: ${Math.round(features.ai_probability * 100)}% malicious probability`);
   }
 
   // Cap score at 100
@@ -117,7 +150,7 @@ export async function performScan(filePath: string, filename: string): Promise<S
     metadata: {
       extension: filename.split('.').pop(),
       timestamp: new Date().toISOString(),
-      magic: buffer.slice(0, 4).toString('hex'), // Magic bytes
+      magic: buffer.slice(0, 4).toString('hex'),
     }
   };
 }

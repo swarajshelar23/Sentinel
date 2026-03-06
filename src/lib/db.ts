@@ -25,10 +25,24 @@ db.exec(`
     vt_results TEXT,
     yara_matches TEXT,
     metadata TEXT,
+    ai_probability REAL,
+    ai_prediction TEXT,
     status TEXT DEFAULT 'completed',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
 `);
+
+// Migration: Ensure AI columns exist if table was created before AI update
+const tableInfo = db.prepare("PRAGMA table_info(scans)").all() as any[];
+const hasAiProb = tableInfo.some(col => col.name === 'ai_probability');
+const hasAiPred = tableInfo.some(col => col.name === 'ai_prediction');
+
+if (!hasAiProb) {
+  db.exec("ALTER TABLE scans ADD COLUMN ai_probability REAL");
+}
+if (!hasAiPred) {
+  db.exec("ALTER TABLE scans ADD COLUMN ai_prediction TEXT");
+}
 
 export default db;
