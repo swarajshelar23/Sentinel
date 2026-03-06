@@ -117,7 +117,8 @@ export default function History() {
                       report: { 
                         score: scan.threat_score, 
                         classification: scan.classification, 
-                        details: [] 
+                        details: [],
+                        contributions: scan.contributions ? JSON.parse(scan.contributions) : { entropy: 0, yara: 0, virusTotal: 0, ai: 0 }
                       }, 
                       vtResults: JSON.parse(scan.vt_results) 
                     } 

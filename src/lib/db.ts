@@ -37,12 +37,16 @@ db.exec(`
 const tableInfo = db.prepare("PRAGMA table_info(scans)").all() as any[];
 const hasAiProb = tableInfo.some(col => col.name === 'ai_probability');
 const hasAiPred = tableInfo.some(col => col.name === 'ai_prediction');
+const hasContributions = tableInfo.some(col => col.name === 'contributions');
 
 if (!hasAiProb) {
   db.exec("ALTER TABLE scans ADD COLUMN ai_probability REAL");
 }
 if (!hasAiPred) {
   db.exec("ALTER TABLE scans ADD COLUMN ai_prediction TEXT");
+}
+if (!hasContributions) {
+  db.exec("ALTER TABLE scans ADD COLUMN contributions TEXT");
 }
 
 export default db;

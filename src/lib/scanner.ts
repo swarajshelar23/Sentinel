@@ -18,6 +18,12 @@ export interface ScanResult {
   score: number;
   classification: 'Safe' | 'Suspicious' | 'Malware' | 'High Risk';
   details: string[];
+  contributions: {
+    entropy: number;
+    yara: number;
+    virusTotal: number;
+    ai: number;
+  };
 }
 
 /**
@@ -131,6 +137,12 @@ export function calculateThreatScore(
   const weights = { ...DEFAULT_WEIGHTS, ...customWeights };
   let score = 0;
   const details: string[] = [];
+  const contributions = {
+    entropy: 0,
+    yara: 0,
+    virusTotal: 0,
+    ai: 0
+  };
 
   // Determine available components and normalize weights if necessary
   // For example, if VT is not available, we might want to redistribute its weight
@@ -147,6 +159,7 @@ export function calculateThreatScore(
   if (features.entropy > 7.2) {
     const weight = getNormalizedWeight(weights.entropy);
     score += weight;
+    contributions.entropy = weight;
     details.push(`High entropy detected (${Math.round(weight)}% weight)`);
   }
 
@@ -155,6 +168,7 @@ export function calculateThreatScore(
     const maxWeight = getNormalizedWeight(weights.yara);
     const matchScore = Math.min(features.yara_matches.length * (maxWeight / 2), maxWeight);
     score += matchScore;
+    contributions.yara = matchScore;
     details.push(`Signature matches: ${features.yara_matches.join(', ')} (${Math.round(matchScore)}% weight)`);
   }
 
@@ -165,6 +179,7 @@ export function calculateThreatScore(
       const maxWeight = getNormalizedWeight(weights.virusTotal);
       const vtScore = Math.min(maliciousCount * (maxWeight / 5), maxWeight);
       score += vtScore;
+      contributions.virusTotal = vtScore;
       details.push(`VirusTotal: ${maliciousCount} engines flagged this file (${Math.round(vtScore)}% weight)`);
     }
   }
@@ -174,6 +189,7 @@ export function calculateThreatScore(
     const maxWeight = getNormalizedWeight(weights.ai);
     const aiImpact = features.ai_probability * maxWeight;
     score += aiImpact;
+    contributions.ai = aiImpact;
     details.push(`AI Classifier: ${Math.round(features.ai_probability * 100)}% malicious probability (${Math.round(aiImpact)}% weight)`);
   }
 
@@ -185,7 +201,7 @@ export function calculateThreatScore(
   else if (score >= 40) classification = 'Malware';
   else if (score >= 10) classification = 'Suspicious';
 
-  return { score, classification, details };
+  return { score, classification, details, contributions };
 }
 
 export async function performScan(filePath: string, filename: string): Promise<ScanFeatures> {

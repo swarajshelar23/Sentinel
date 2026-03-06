@@ -9,7 +9,7 @@ export default function Navbar({ user, onLogout }: { user: any, onLogout: () => 
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 group">
           <Shield className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-          <span className="font-mono font-bold tracking-tighter text-lg">SENTINEL_v1.0</span>
+          <span className="font-mono font-bold tracking-tighter text-lg">SENTINEL_v2.0</span>
         </Link>
 
         <div className="flex items-center gap-6">

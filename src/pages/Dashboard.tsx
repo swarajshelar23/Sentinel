@@ -164,7 +164,7 @@ export default function Dashboard() {
       <div className="grid md:grid-cols-4 gap-4">
         {[
           { label: 'SYSTEM_STATUS', value: 'OPERATIONAL', color: 'text-green-600' },
-          { label: 'SCAN_ENGINE', value: 'v2.4.1', color: 'text-[#141414]' },
+          { label: 'SCAN_ENGINE', value: 'v3.0.0', color: 'text-[#141414]' },
           { label: 'DB_RECORDS', value: stats?.total || 0, color: 'text-[#141414]' },
           { label: 'ACTIVE_ALERTS', value: stats?.high_risk || 0, color: 'text-red-600' }
         ].map((item, i) => (

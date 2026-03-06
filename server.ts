@@ -105,8 +105,8 @@ async function startServer() {
 
       // Store in DB
       const scanId = db.prepare(`
-        INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata, ai_probability, ai_prediction)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata, ai_probability, ai_prediction, contributions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         req.user.id,
         features.filename,
@@ -119,7 +119,8 @@ async function startServer() {
         JSON.stringify(features.yara_matches),
         JSON.stringify(features.metadata),
         features.ai_probability,
-        features.ai_prediction
+        features.ai_prediction,
+        JSON.stringify(report.contributions)
       ).lastInsertRowid;
 
       // Cleanup

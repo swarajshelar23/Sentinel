@@ -1,6 +1,7 @@
 import { useLocation, useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ShieldAlert, ShieldCheck, FileText, Hash, Activity, ExternalLink, ChevronLeft } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, FileText, Hash, Activity, ExternalLink, ChevronLeft, PieChart as ChartIcon } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function ScanResult() {
   const { id } = useParams();
@@ -15,7 +16,19 @@ export default function ScanResult() {
   );
 
   const { features, report } = scanData;
-  const isMalicious = report.score >= 50;
+  const isMalicious = report.score >= 40;
+
+  const contributions = report.contributions || { entropy: 0, yara: 0, virusTotal: 0, ai: 0 };
+
+  const chartData = [
+    {
+      name: 'Score Contribution',
+      Entropy: Math.round(contributions.entropy),
+      YARA: Math.round(contributions.yara),
+      VirusTotal: Math.round(contributions.virusTotal),
+      AI: Math.round(contributions.ai),
+    }
+  ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -45,6 +58,36 @@ export default function ScanResult() {
           <div className="w-full bg-white/50 border border-[#141414]/10 p-4">
             <p className="font-mono text-xs mb-1 uppercase">Risk_Score</p>
             <p className="text-5xl font-black tracking-tighter">{report.score}/100</p>
+          </div>
+
+          <div className="w-full mt-6 space-y-2">
+            <p className="font-mono text-[10px] uppercase opacity-50 text-left">Score_Composition</p>
+            <div className="h-48 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  layout="vertical"
+                  data={chartData}
+                  margin={{ top: 0, right: 0, left: -40, bottom: 0 }}
+                >
+                  <XAxis type="number" domain={[0, 100]} hide />
+                  <YAxis type="category" dataKey="name" hide />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#141414', border: 'none', color: '#E4E3E0', fontFamily: 'monospace', fontSize: '10px' }}
+                    itemStyle={{ color: '#E4E3E0' }}
+                  />
+                  <Bar dataKey="Entropy" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="YARA" stackId="a" fill="#ef4444" />
+                  <Bar dataKey="VirusTotal" stackId="a" fill="#f59e0b" />
+                  <Bar dataKey="AI" stackId="a" fill="#8b5cf6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <div className="flex items-center gap-1 font-mono text-[8px] uppercase"><div className="w-2 h-2 bg-[#3b82f6]" /> Entropy</div>
+              <div className="flex items-center gap-1 font-mono text-[8px] uppercase"><div className="w-2 h-2 bg-[#ef4444]" /> YARA</div>
+              <div className="flex items-center gap-1 font-mono text-[8px] uppercase"><div className="w-2 h-2 bg-[#f59e0b]" /> VirusTotal</div>
+              <div className="flex items-center gap-1 font-mono text-[8px] uppercase"><div className="w-2 h-2 bg-[#8b5cf6]" /> AI_Model</div>
+            </div>
           </div>
         </motion.div>
 
@@ -85,7 +128,7 @@ export default function ScanResult() {
               </div>
               <div>
                 <p className="font-mono text-[10px] uppercase opacity-50">Detection_Engine</p>
-                <p className="font-bold">SENTINEL_AI_v2.0</p>
+                <p className="font-bold">SENTINEL_AI_v3.0</p>
               </div>
             </div>
           </div>
