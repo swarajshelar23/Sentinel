@@ -89,43 +89,79 @@ export function getAiPrediction(filePath: string, features: ScanFeatures, vtMali
   }
 }
 
+export interface ScoringConfig {
+  entropy: number;
+  yara: number;
+  virusTotal: number;
+  ai: number;
+}
+
+const DEFAULT_WEIGHTS: ScoringConfig = {
+  entropy: 20,
+  yara: 30,
+  virusTotal: 25,
+  ai: 25
+};
+
 /**
- * Threat Scoring Engine (Updated with AI)
+ * Threat Scoring Engine (Updated with Dynamic Weights)
  */
-export function calculateThreatScore(features: ScanFeatures, vtResults?: any): ScanResult {
+export function calculateThreatScore(
+  features: ScanFeatures, 
+  vtResults?: any, 
+  customWeights?: Partial<ScoringConfig>
+): ScanResult {
+  const weights = { ...DEFAULT_WEIGHTS, ...customWeights };
   let score = 0;
   const details: string[] = [];
 
-  // 1. Entropy Analysis (20% weight)
+  // Determine available components and normalize weights if necessary
+  // For example, if VT is not available, we might want to redistribute its weight
+  let totalAvailableWeight = weights.entropy + weights.yara + weights.ai;
+  if (vtResults) {
+    totalAvailableWeight += weights.virusTotal;
+  }
+
+  const getNormalizedWeight = (weight: number) => {
+    return (weight / totalAvailableWeight) * 100;
+  };
+
+  // 1. Entropy Analysis
   if (features.entropy > 7.2) {
-    score += 20;
-    details.push('High entropy detected (potential packing/encryption)');
+    const weight = getNormalizedWeight(weights.entropy);
+    score += weight;
+    details.push(`High entropy detected (${Math.round(weight)}% weight)`);
   }
 
-  // 2. YARA/Signature Matches (30% weight)
+  // 2. YARA/Signature Matches
   if (features.yara_matches.length > 0) {
-    score += Math.min(features.yara_matches.length * 15, 30);
-    details.push(`Signature matches: ${features.yara_matches.join(', ')}`);
+    const maxWeight = getNormalizedWeight(weights.yara);
+    const matchScore = Math.min(features.yara_matches.length * (maxWeight / 2), maxWeight);
+    score += matchScore;
+    details.push(`Signature matches: ${features.yara_matches.join(', ')} (${Math.round(matchScore)}% weight)`);
   }
 
-  // 3. VirusTotal Reputation (25% weight)
+  // 3. VirusTotal Reputation
   if (vtResults) {
     const maliciousCount = vtResults.data?.attributes?.last_analysis_stats?.malicious || 0;
     if (maliciousCount > 0) {
-      score += Math.min(maliciousCount * 5, 25);
-      details.push(`VirusTotal: ${maliciousCount} engines flagged this file`);
+      const maxWeight = getNormalizedWeight(weights.virusTotal);
+      const vtScore = Math.min(maliciousCount * (maxWeight / 5), maxWeight);
+      score += vtScore;
+      details.push(`VirusTotal: ${maliciousCount} engines flagged this file (${Math.round(vtScore)}% weight)`);
     }
   }
 
-  // 4. AI Model Probability (25% weight)
+  // 4. AI Model Probability
   if (features.ai_probability !== undefined) {
-    const aiImpact = Math.round(features.ai_probability * 25);
+    const maxWeight = getNormalizedWeight(weights.ai);
+    const aiImpact = features.ai_probability * maxWeight;
     score += aiImpact;
-    details.push(`AI Classifier: ${Math.round(features.ai_probability * 100)}% malicious probability`);
+    details.push(`AI Classifier: ${Math.round(features.ai_probability * 100)}% malicious probability (${Math.round(aiImpact)}% weight)`);
   }
 
   // Cap score at 100
-  score = Math.min(score, 100);
+  score = Math.min(Math.round(score), 100);
 
   let classification: ScanResult['classification'] = 'Safe';
   if (score >= 80) classification = 'High Risk';

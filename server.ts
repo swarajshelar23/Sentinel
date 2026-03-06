@@ -12,6 +12,13 @@ import axios from "axios";
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-malware-scanner-key";
 const UPLOAD_DIR = "uploads";
 
+const THREAT_WEIGHTS = {
+  entropy: Number(process.env.WEIGHT_ENTROPY) || 20,
+  yara: Number(process.env.WEIGHT_YARA) || 30,
+  virusTotal: Number(process.env.WEIGHT_VT) || 25,
+  ai: Number(process.env.WEIGHT_AI) || 25,
+};
+
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR);
 }
@@ -94,7 +101,7 @@ async function startServer() {
       features.ai_probability = aiResult.probability;
       features.ai_prediction = aiResult.prediction;
 
-      const report = calculateThreatScore(features, vtResults);
+      const report = calculateThreatScore(features, vtResults, THREAT_WEIGHTS);
 
       // Store in DB
       const scanId = db.prepare(`
