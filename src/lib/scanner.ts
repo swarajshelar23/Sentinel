@@ -47,6 +47,11 @@ export function scanSignatures(buffer: Buffer): string[] {
     { name: 'Potential_Ransomware_Note', pattern: Buffer.from('YOUR FILES HAVE BEEN ENCRYPTED') },
     { name: 'Reverse_Shell_Pattern', pattern: Buffer.from('/bin/sh -i') },
     { name: 'Crypto_Stealer_Pattern', pattern: Buffer.from('0x[a-fA-F0-9]{40}') },
+    { name: 'Suspicious_PE_Header', pattern: Buffer.from('MZ') }, // Basic check for executables
+    { name: 'PowerShell_Download', pattern: Buffer.from('Invoke-WebRequest') },
+    { name: 'Base64_Encoded_Payload', pattern: Buffer.from('base64') },
+    { name: 'WannaCry_Killswitch', pattern: Buffer.from('iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com') },
+    { name: 'Discord_Webhook_Stealer', pattern: Buffer.from('discord.com/api/webhooks') },
   ];
 
   for (const sig of signatures) {
@@ -65,10 +70,22 @@ export function getAiPrediction(filePath: string, features: ScanFeatures, vtMali
     const extension = path.extname(features.filename).toLowerCase();
     const extMap: Record<string, number> = { '.exe': 1, '.dll': 1, '.bin': 1, '.sh': 2, '.py': 2, '.js': 2, '.doc': 3, '.pdf': 3 };
     
-    const suspiciousKeywords = ['eval', 'exec', 'system', 'shell_exec', 'powershell', 'cmd.exe', 'http', 'https'];
+    const suspiciousKeywords = [
+      Buffer.from('eval'), 
+      Buffer.from('exec'), 
+      Buffer.from('system'), 
+      Buffer.from('shell_exec'), 
+      Buffer.from('powershell'), 
+      Buffer.from('cmd.exe'), 
+      Buffer.from('http'), 
+      Buffer.from('https'),
+      Buffer.from('curl'),
+      Buffer.from('wget'),
+      Buffer.from('chmod'),
+      Buffer.from('rm -rf')
+    ];
     const buffer = fs.readFileSync(filePath); 
-    const content = buffer.toString('utf8');
-    const suspiciousCount = suspiciousKeywords.reduce((acc, kw) => acc + (content.includes(kw) ? 1 : 0), 0);
+    const suspiciousCount = suspiciousKeywords.reduce((acc, kw) => acc + (buffer.includes(kw) ? 1 : 0), 0);
 
     const pythonFeatures = {
       file_size: features.filesize,
@@ -164,9 +181,9 @@ export function calculateThreatScore(
   score = Math.min(Math.round(score), 100);
 
   let classification: ScanResult['classification'] = 'Safe';
-  if (score >= 80) classification = 'High Risk';
-  else if (score >= 50) classification = 'Malware';
-  else if (score >= 20) classification = 'Suspicious';
+  if (score >= 75) classification = 'High Risk';
+  else if (score >= 40) classification = 'Malware';
+  else if (score >= 10) classification = 'Suspicious';
 
   return { score, classification, details };
 }

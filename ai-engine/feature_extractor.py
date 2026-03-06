@@ -22,7 +22,11 @@ def extract_features(file_path, yara_match_count=0, vt_malicious_count=0):
         extension = os.path.splitext(file_path)[1].lower()
         
         # Simple suspicious string detection
-        suspicious_keywords = [b'eval', b'exec', b'system', b'shell_exec', b'powershell', b'cmd.exe', b'http', b'https']
+        suspicious_keywords = [
+            b'eval', b'exec', b'system', b'shell_exec', 
+            b'powershell', b'cmd.exe', b'http', b'https',
+            b'curl', b'wget', b'chmod', b'rm -rf'
+        ]
         suspicious_strings_count = sum(1 for kw in suspicious_keywords if kw in data)
         
         # Map extension to a numerical value for the model

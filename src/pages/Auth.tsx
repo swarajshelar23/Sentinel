@@ -24,8 +24,11 @@ export default function Auth({ onLogin }: { onLogin: (user: any) => void }) {
         localStorage.setItem('user', JSON.stringify(data.user));
         onLogin(data.user);
       } else {
-        setIsLogin(true);
-        setError('Registration successful. Please login.');
+        // Auto-login after registration
+        const loginRes = await axios.post('/api/auth/login', { username, password });
+        localStorage.setItem('token', loginRes.data.token);
+        localStorage.setItem('user', JSON.stringify(loginRes.data.user));
+        onLogin(loginRes.data.user);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Authentication failed');
