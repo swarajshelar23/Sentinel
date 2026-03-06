@@ -9,7 +9,7 @@ export default function Navbar({ user, onLogout }: { user: any, onLogout: () => 
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 group">
           <Shield className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-          <span className="font-mono font-bold tracking-tighter text-lg">SENTINEL_v2.0</span>
+          <span className="font-mono font-bold tracking-tighter text-lg">SENTINEL_v3.0</span>
         </Link>
 
         <div className="flex items-center gap-6">
@@ -19,10 +19,20 @@ export default function Navbar({ user, onLogout }: { user: any, onLogout: () => 
                 <LayoutDashboard className="w-4 h-4" />
                 DASHBOARD
               </Link>
+              <Link to="/analytics" className="flex items-center gap-1.5 text-sm font-medium hover:underline underline-offset-4">
+                <Shield className="w-4 h-4" />
+                ANALYTICS
+              </Link>
               <Link to="/history" className="flex items-center gap-1.5 text-sm font-medium hover:underline underline-offset-4">
                 <History className="w-4 h-4" />
                 HISTORY
               </Link>
+              {user.role === 'admin' && (
+                <Link to="/admin" className="flex items-center gap-1.5 text-sm font-medium hover:underline underline-offset-4 text-red-600">
+                  <Terminal className="w-4 h-4" />
+                  ADMIN
+                </Link>
+              )}
               <button 
                 onClick={() => { onLogout(); navigate('/'); }}
                 className="flex items-center gap-1.5 text-sm font-medium hover:underline underline-offset-4 cursor-pointer"

@@ -17,15 +17,16 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 export default function Dashboard() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [scanning, setScanning] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [queue, setQueue] = useState<any[]>([]);
   const navigate = useNavigate();
 
   const fetchStats = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('/api/stats', {
+      const { data } = await axios.get('/api/analytics/dashboard', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setStats(data);
@@ -34,29 +35,57 @@ export default function Dashboard() {
     }
   }, []);
 
+  const fetchQueue = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.get('/api/scan/queue', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setQueue(data);
+    } catch (err) {
+      console.error('Failed to fetch queue');
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 5000);
+    return () => clearInterval(interval);
+  }, [fetchStats, fetchQueue]);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
 
     setScanning(true);
     const formData = new FormData();
-    formData.append('file', file);
+    files.forEach(f => formData.append('files', f));
 
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.post('/api/scan', formData, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      navigate(`/scan/${data.id}`, { state: { scanData: data } });
+      if (files.length === 1) {
+        const singleFormData = new FormData();
+        singleFormData.append('file', files[0]);
+        const { data } = await axios.post('/api/scan', singleFormData, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        navigate(`/scan/${data.id}`, { state: { scanData: data } });
+      } else {
+        await axios.post('/api/scan/batch', formData, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        setFiles([]);
+        fetchQueue();
+      }
     } catch (err) {
-      alert('Scan failed. Please try again.');
+      alert('Upload failed. Please try again.');
     } finally {
       setScanning(false);
     }
@@ -65,7 +94,7 @@ export default function Dashboard() {
   const doughnutData = {
     labels: ['Safe', 'Suspicious', 'Malware', 'High Risk'],
     datasets: [{
-      data: stats ? [stats.safe, stats.suspicious, stats.malware, stats.high_risk] : [0, 0, 0, 0],
+      data: stats?.stats ? [stats.stats.safe, stats.stats.suspicious, stats.stats.malware, stats.stats.high_risk] : [0, 0, 0, 0],
       backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#7f1d1d'],
       borderWidth: 0,
     }]
@@ -86,50 +115,81 @@ export default function Dashboard() {
 
           <form onSubmit={handleUpload} className="space-y-6">
             <div 
-              className={`border-2 border-dashed border-[#141414]/20 p-12 text-center hover:border-[#141414] transition-colors cursor-pointer relative ${file ? 'bg-green-50' : ''}`}
+              className={`border-2 border-dashed border-[#141414]/20 p-12 text-center hover:border-[#141414] transition-colors cursor-pointer relative ${files.length > 0 ? 'bg-green-50' : ''}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
-                if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+                if (e.dataTransfer.files) setFiles(Array.from(e.dataTransfer.files));
               }}
             >
               <input 
                 type="file" 
-                onChange={(e) => e.target.files && setFile(e.target.files[0])}
+                multiple
+                onChange={(e) => e.target.files && setFiles(Array.from(e.target.files))}
                 className="absolute inset-0 opacity-0 cursor-pointer"
               />
               <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-              {file ? (
+              {files.length > 0 ? (
                 <div>
-                  <p className="font-bold text-lg">{file.name}</p>
-                  <p className="font-mono text-xs opacity-50">{(file.size / 1024).toFixed(2)} KB</p>
+                  <p className="font-bold text-lg">{files.length} FILES_SELECTED</p>
+                  <p className="font-mono text-xs opacity-50">
+                    {files.map(f => f.name).join(', ').slice(0, 50)}...
+                  </p>
                 </div>
               ) : (
                 <>
-                  <p className="font-bold text-lg">DROP_FILE_OR_CLICK_TO_BROWSE</p>
-                  <p className="font-mono text-xs opacity-50 mt-2">MAX_SIZE: 50MB | SUPPORTED: ALL_TYPES</p>
+                  <p className="font-bold text-lg">DROP_FILES_OR_CLICK_TO_BROWSE</p>
+                  <p className="font-mono text-xs opacity-50 mt-2">MAX_SIZE: 50MB | BATCH_LIMIT: 10_FILES</p>
                 </>
               )}
             </div>
 
             <button 
               type="submit"
-              disabled={!file || scanning}
+              disabled={files.length === 0 || scanning}
               className="w-full bg-[#141414] text-[#E4E3E0] py-4 font-bold flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
               {scanning ? (
                 <>
                   <Activity className="w-5 h-5 animate-spin" />
-                  ANALYZING_THREAT_VECTORS...
+                  INITIATING_BATCH_PROCESS...
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-5 h-5" />
-                  INITIATE_SCAN
+                  {files.length > 1 ? `SCAN_${files.length}_FILES` : 'INITIATE_SCAN'}
                 </>
               )}
             </button>
           </form>
+
+          {queue.length > 0 && (
+            <div className="mt-12 border-t border-[#141414]/10 pt-8">
+              <h3 className="font-mono font-bold text-sm mb-4 uppercase opacity-50">Active_Scan_Queue</h3>
+              <div className="space-y-3">
+                {queue.map((job) => (
+                  <div key={job.id} className="flex items-center justify-between p-3 border border-[#141414]/5 bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-4 h-4 opacity-40" />
+                      <div>
+                        <p className="text-xs font-bold truncate w-40">{job.filename}</p>
+                        <p className="text-[10px] font-mono opacity-50 uppercase">{job.status}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-500 ${job.status === 'failed' ? 'bg-red-600' : 'bg-blue-600'}`}
+                          style={{ width: `${job.progress}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-[10px] font-bold">{job.progress}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </motion.div>
 
         <motion.div 
@@ -164,7 +224,7 @@ export default function Dashboard() {
       <div className="grid md:grid-cols-4 gap-4">
         {[
           { label: 'SYSTEM_STATUS', value: 'OPERATIONAL', color: 'text-green-600' },
-          { label: 'SCAN_ENGINE', value: 'v3.0.0', color: 'text-[#141414]' },
+          { label: 'SCAN_ENGINE', value: 'v4.0.0', color: 'text-[#141414]' },
           { label: 'DB_RECORDS', value: stats?.total || 0, color: 'text-[#141414]' },
           { label: 'ACTIVE_ALERTS', value: stats?.high_risk || 0, color: 'text-red-600' }
         ].map((item, i) => (

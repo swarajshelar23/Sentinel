@@ -6,6 +6,8 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
 import ScanResult from './pages/ScanResult';
+import Analytics from './pages/Analytics';
+import Admin from './pages/Admin';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -39,6 +41,8 @@ export default function App() {
             <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/auth" />} />
             <Route path="/history" element={user ? <History /> : <Navigate to="/auth" />} />
             <Route path="/scan/:id" element={user ? <ScanResult /> : <Navigate to="/auth" />} />
+            <Route path="/analytics" element={user ? <Analytics /> : <Navigate to="/auth" />} />
+            <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/dashboard" />} />
           </Routes>
         </main>
       </div>

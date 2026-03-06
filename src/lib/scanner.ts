@@ -12,6 +12,10 @@ export interface ScanFeatures {
   metadata: Record<string, any>;
   ai_probability?: number;
   ai_prediction?: string;
+  strings?: string[];
+  headers?: Record<string, any>;
+  packer?: string;
+  indicators?: string[];
 }
 
 export interface ScanResult {
@@ -24,6 +28,79 @@ export interface ScanResult {
     virusTotal: number;
     ai: number;
   };
+}
+
+/**
+ * Extracts printable strings from a buffer.
+ */
+export function extractStrings(buffer: Buffer, minLength: number = 4): string[] {
+  const strings: string[] = [];
+  let currentString = '';
+  for (const byte of buffer) {
+    if (byte >= 32 && byte <= 126) {
+      currentString += String.fromCharCode(byte);
+    } else {
+      if (currentString.length >= minLength) {
+        strings.push(currentString);
+      }
+      currentString = '';
+    }
+  }
+  return strings.slice(0, 100); // Limit to first 100 strings
+}
+
+/**
+ * Detects common packers like UPX.
+ */
+export function detectPacker(buffer: Buffer): string | null {
+  const packers = [
+    { name: 'UPX', pattern: Buffer.from('UPX!') },
+    { name: 'ASPack', pattern: Buffer.from('.aspack') },
+    { name: 'Themida', pattern: Buffer.from('Themida') },
+  ];
+  for (const p of packers) {
+    if (buffer.includes(p.pattern)) return p.name;
+  }
+  return null;
+}
+
+/**
+ * Analyzes file headers for suspicious characteristics.
+ */
+export function analyzeHeaders(buffer: Buffer): Record<string, any> {
+  const headers: Record<string, any> = {};
+  const magic = buffer.slice(0, 4).toString('hex');
+  if (buffer.slice(0, 2).toString() === 'MZ') {
+    headers.type = 'PE (Windows Executable)';
+    headers.is_executable = true;
+  } else if (magic === '7f454c46') {
+    headers.type = 'ELF (Linux Executable)';
+    headers.is_executable = true;
+  } else if (magic === 'cafebabe' || magic === 'feedface') {
+    headers.type = 'Mach-O (macOS Executable)';
+    headers.is_executable = true;
+  } else {
+    headers.type = 'Unknown';
+    headers.is_executable = false;
+  }
+  headers.magic = magic;
+  return headers;
+}
+
+/**
+ * Identifies suspicious behavior indicators.
+ */
+export function getIndicators(features: ScanFeatures, buffer: Buffer): string[] {
+  const indicators: string[] = [];
+  if (features.entropy > 7.5) indicators.push('EXTREME_ENTROPY (Potential Encryption/Packing)');
+  if (features.packer) indicators.push(`PACKED_EXECUTABLE (${features.packer})`);
+  if (features.headers?.is_executable && features.entropy > 7.0) indicators.push('SUSPICIOUS_EXECUTABLE_ENTROPY');
+  
+  const suspiciousStrings = ['CreateRemoteThread', 'WriteProcessMemory', 'OpenProcess', 'ShellExecute', 'HttpOpenRequest'];
+  const foundStrings = extractStrings(buffer).filter(s => suspiciousStrings.some(ss => s.includes(ss)));
+  if (foundStrings.length > 0) indicators.push(`SUSPICIOUS_API_IMPORTS: ${foundStrings.join(', ')}`);
+
+  return indicators;
 }
 
 /**
@@ -210,7 +287,7 @@ export async function performScan(filePath: string, filename: string): Promise<S
   const entropy = calculateEntropy(buffer);
   const yara_matches = scanSignatures(buffer);
   
-  return {
+  const features: ScanFeatures = {
     filename,
     filesize: buffer.length,
     hash_sha256: hash,
@@ -219,7 +296,14 @@ export async function performScan(filePath: string, filename: string): Promise<S
     metadata: {
       extension: filename.split('.').pop(),
       timestamp: new Date().toISOString(),
-      magic: buffer.slice(0, 4).toString('hex'),
     }
   };
+
+  features.strings = extractStrings(buffer);
+  features.packer = detectPacker(buffer) || undefined;
+  features.headers = analyzeHeaders(buffer);
+  features.indicators = getIndicators(features, buffer);
+  features.metadata.magic = features.headers.magic;
+
+  return features;
 }

@@ -2,15 +2,21 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import multer from "multer";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import db from "./src/lib/db.js";
 import { performScan, calculateThreatScore, getAiPrediction } from "./src/lib/scanner.js";
 import axios from "axios";
+import { MonitoringService } from "./src/monitoring/service.js";
+import { AnalyticsService } from "./src/analytics/service.js";
+import { ScanQueueService } from "./src/scan-queue/service.js";
+import { ThreatIntelligenceService } from "./src/threat-intelligence/service.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-malware-scanner-key";
 const UPLOAD_DIR = "uploads";
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 const THREAT_WEIGHTS = {
   entropy: Number(process.env.WEIGHT_ENTROPY) || 20,
@@ -23,13 +29,27 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR);
 }
 
-const upload = multer({ dest: UPLOAD_DIR });
+const upload = multer({ 
+  dest: UPLOAD_DIR,
+  limits: { fileSize: MAX_FILE_SIZE }
+});
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // --- Audit Logging Middleware ---
+  app.use((req: any, res, next) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    res.on('finish', () => {
+      if (req.user && req.path.startsWith('/api')) {
+        MonitoringService.logEvent(req.user.id, 'API_REQUEST', `${req.method} ${req.path}`, { status: res.statusCode }, ip as string);
+      }
+    });
+    next();
+  });
 
   // --- Auth Middleware ---
   const authenticate = (req: any, res: any, next: any) => {
@@ -44,12 +64,20 @@ async function startServer() {
     }
   };
 
+  const checkAdmin = (req: any, res: any, next: any) => {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+    next();
+  };
+
   // --- Auth Routes ---
   app.post("/api/auth/register", async (req, res) => {
     const { username, password } = req.body;
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const result = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashedPassword);
+      MonitoringService.logEvent(Number(result.lastInsertRowid), 'USER_REGISTER', `User ${username} registered`);
       res.json({ success: true, userId: result.lastInsertRowid });
     } catch (err: any) {
       res.status(400).json({ error: "Username already exists" });
@@ -60,9 +88,11 @@ async function startServer() {
     const { username, password } = req.body;
     const user: any = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
     if (!user || !(await bcrypt.compare(password, user.password))) {
+      MonitoringService.logEvent(null, 'LOGIN_FAILED', `Failed login attempt for ${username}`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET);
+    MonitoringService.logEvent(user.id, 'LOGIN_SUCCESS', `User ${username} logged in`);
     res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
   });
 
@@ -71,9 +101,32 @@ async function startServer() {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     try {
+      const buffer = fs.readFileSync(req.file.path);
+      const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+
+      // 1. File Intelligence Lookup (Cache)
+      const cached = db.prepare("SELECT * FROM file_intelligence WHERE hash_sha256 = ?").get(hash) as any;
+      if (cached) {
+        db.prepare("UPDATE file_intelligence SET scan_count = scan_count + 1, last_seen = CURRENT_TIMESTAMP WHERE hash_sha256 = ?").run(hash);
+        const previousScan = db.prepare("SELECT * FROM scans WHERE hash_sha256 = ? ORDER BY created_at DESC LIMIT 1").get(hash) as any;
+        if (previousScan) {
+          MonitoringService.logEvent(req.user.id, 'SCAN_CACHE_HIT', `Cache hit for ${hash}`);
+          return res.json({ 
+            id: previousScan.id, 
+            features: { ...JSON.parse(previousScan.metadata), filename: req.file.originalname, hash_sha256: hash }, 
+            report: { score: previousScan.threat_score, classification: previousScan.classification, contributions: JSON.parse(previousScan.contributions) },
+            cached: true 
+          });
+        }
+      }
+
       const features = await performScan(req.file.path, req.file.originalname);
       
-      // VirusTotal Lookup (Optional)
+      // 2. Threat Intelligence Lookup
+      const intel = await ThreatIntelligenceService.lookupHash(features.hash_sha256);
+      const intelMalicious = intel.some(i => i.malicious);
+      
+      // 3. VirusTotal Lookup
       let vtResults = null;
       let vtMaliciousCount = 0;
       const vtKey = process.env.VIRUSTOTAL_API_KEY;
@@ -86,27 +139,24 @@ async function startServer() {
           vtResults = vtResponse.data;
           vtMaliciousCount = vtResults.data?.attributes?.last_analysis_stats?.malicious || 0;
         } catch (err: any) {
-          if (err.response?.status === 404) {
-            console.log(`VT: File ${features.hash_sha256} not found in database (normal for new files)`);
-          } else if (err.response?.status === 401) {
-            console.warn("VT: Invalid API Key (401). Please check your VIRUSTOTAL_API_KEY.");
-          } else {
-            console.error("VT lookup error:", err.message);
-          }
+          console.error("VT lookup error:", err.message);
         }
       }
 
-      // AI Prediction
+      // 4. AI Prediction
       const aiResult = getAiPrediction(req.file.path, features, vtMaliciousCount);
       features.ai_probability = aiResult.probability;
       features.ai_prediction = aiResult.prediction;
 
       const report = calculateThreatScore(features, vtResults, THREAT_WEIGHTS);
 
+      // 5. Malware Family Identification (Mock)
+      const malwareFamily = intel.find(i => i.family)?.family || (report.score > 80 ? 'Generic.Malware' : null);
+
       // Store in DB
       const scanId = db.prepare(`
-        INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata, ai_probability, ai_prediction, contributions)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata, ai_probability, ai_prediction, contributions, malware_family)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         req.user.id,
         features.filename,
@@ -120,19 +170,75 @@ async function startServer() {
         JSON.stringify(features.metadata),
         features.ai_probability,
         features.ai_prediction,
-        JSON.stringify(report.contributions)
+        JSON.stringify(report.contributions),
+        malwareFamily
       ).lastInsertRowid;
+
+      // Update File Intelligence
+      db.prepare(`
+        INSERT INTO file_intelligence (hash_sha256, classification, threat_score, malware_family)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(hash_sha256) DO UPDATE SET 
+          last_seen = CURRENT_TIMESTAMP,
+          scan_count = scan_count + 1
+      `).run(features.hash_sha256, report.classification, report.score, malwareFamily);
+
+      MonitoringService.logEvent(req.user.id, 'SCAN_COMPLETED', `Scanned ${features.filename} - Result: ${report.classification}`);
 
       // Cleanup
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
 
-      res.json({ id: scanId, features, report, vtResults });
+      res.json({ id: scanId, features, report, vtResults, intel });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Scan failed" });
     }
+  });
+
+  // --- Batch Scanning ---
+  app.post("/api/scan/batch", authenticate, upload.array("files", 10), async (req: any, res) => {
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: "No files uploaded" });
+
+    const jobIds = [];
+    for (const file of req.files) {
+      const jobId = await ScanQueueService.addToQueue(req.user.id, file.originalname, file.path);
+      jobIds.push(jobId);
+    }
+
+    res.json({ success: true, jobIds, message: "Files queued for processing" });
+  });
+
+  app.get("/api/scan/queue", authenticate, async (req: any, res) => {
+    const queue = await ScanQueueService.getQueueStatus(req.user.id);
+    res.json(queue);
+  });
+
+  // --- Analytics & Monitoring ---
+  app.get("/api/analytics/dashboard", authenticate, async (req, res) => {
+    const data = await AnalyticsService.getDashboardStats();
+    res.json(data);
+  });
+
+  app.get("/api/analytics/ai-accuracy", authenticate, async (req, res) => {
+    const data = await AnalyticsService.getAiAccuracy();
+    res.json(data);
+  });
+
+  app.get("/api/admin/logs", authenticate, checkAdmin, async (req, res) => {
+    const logs = await MonitoringService.getLogs();
+    res.json(logs);
+  });
+
+  app.get("/api/admin/health", authenticate, checkAdmin, async (req, res) => {
+    const health = await MonitoringService.getSystemHealth();
+    res.json(health);
+  });
+
+  app.get("/api/admin/scans", authenticate, checkAdmin, async (req, res) => {
+    const scans = db.prepare("SELECT s.*, u.username FROM scans s JOIN users u ON s.user_id = u.id ORDER BY s.created_at DESC LIMIT 100").all();
+    res.json(scans);
   });
 
   app.get("/api/history", authenticate, (req: any, res) => {
