@@ -40,7 +40,7 @@ def collect_features_from_dir(directory, label):
     
     return features_list, labels_list
 
-def train_model(benign_dir=None, malware_dir=None):
+def train_model(benign_dir=None, malware_dir=None, dataset_file=None):
     if not HAS_ML_LIBS:
         print("Error: scikit-learn and numpy are required for training.")
         return
@@ -48,7 +48,19 @@ def train_model(benign_dir=None, malware_dir=None):
     X = []
     y = []
 
-    # 1. Collect from directories if provided
+    # 1. Load from dataset file if provided
+    if dataset_file and os.path.exists(dataset_file):
+        print(f"Loading dataset from {dataset_file}...")
+        try:
+            with open(dataset_file, 'r') as f:
+                dataset = json.load(f)
+            X.extend(dataset.get('features', []))
+            y.extend(dataset.get('labels', []))
+            print(f"Loaded {len(X)} samples from {dataset_file}.")
+        except Exception as e:
+            print(f"Error loading dataset: {e}")
+
+    # 2. Collect from directories if provided
     if benign_dir:
         bx, by = collect_features_from_dir(benign_dir, 0)
         X.extend(bx)
@@ -59,23 +71,28 @@ def train_model(benign_dir=None, malware_dir=None):
         X.extend(mx)
         y.extend(my)
 
-    # 2. Add synthetic data if dataset is too small or for baseline
-    print("Adding synthetic baseline data...")
-    synthetic_X = [
-        [1000, 3.5, 0, 0, 0, 0],   # Safe
-        [50000, 7.8, 1, 5, 2, 10], # Malicious
-        [2000, 4.2, 2, 1, 0, 0],   # Safe
-        [15000, 6.5, 1, 3, 1, 5],  # Suspicious
-        [500, 2.1, 0, 0, 0, 0],    # Safe
-        [100000, 7.9, 1, 10, 5, 20] # High Risk
-    ]
-    synthetic_y = [0, 1, 0, 1, 0, 1]
-    
-    X.extend(synthetic_X)
-    y.extend(synthetic_y)
+    # 3. Add synthetic data if dataset is too small or for baseline
+    if len(X) < 10:
+        print("Adding synthetic baseline data...")
+        synthetic_X = [
+            [1000, 3.5, 0, 0, 0, 0],   # Safe
+            [50000, 7.8, 1, 5, 2, 10], # Malicious
+            [2000, 4.2, 2, 1, 0, 0],   # Safe
+            [15000, 6.5, 1, 3, 1, 5],  # Suspicious
+            [500, 2.1, 0, 0, 0, 0],    # Safe
+            [100000, 7.9, 1, 10, 5, 20] # High Risk
+        ]
+        synthetic_y = [0, 1, 0, 1, 0, 1]
+        
+        X.extend(synthetic_X)
+        y.extend(synthetic_y)
 
     X = np.array(X)
     y = np.array(y)
+
+    if len(X) == 0:
+        print("Error: No data to train on.")
+        return
 
     print(f"Total samples: {len(X)}")
 
@@ -102,6 +119,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train Malware Detection AI Model')
     parser.add_argument('--benign', help='Directory containing benign file samples')
     parser.add_argument('--malware', help='Directory containing malware file samples')
+    parser.add_argument('--dataset', help='JSON file containing pre-extracted features')
     
     args = parser.parse_args()
     
@@ -110,4 +128,4 @@ if __name__ == "__main__":
         print("Please install them using: pip install numpy scikit-learn joblib")
         sys.exit(1)
 
-    train_model(args.benign, args.malware)
+    train_model(args.benign, args.malware, args.dataset)
