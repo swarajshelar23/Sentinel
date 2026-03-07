@@ -55,10 +55,20 @@ def predict(features):
         probability = model.predict_proba(feature_vector)[0][1]
         prediction = "Malicious" if probability > 0.5 else "Benign"
         
+        # Identify model type from pipeline if possible
+        method = "ai_model"
+        try:
+            from sklearn.pipeline import Pipeline
+            if isinstance(model, Pipeline):
+                clf_name = model.named_steps['classifier'].__class__.__name__
+                method = f"ai_{clf_name.lower()}"
+        except:
+            pass
+            
         return {
             "probability": float(probability),
             "prediction": prediction,
-            "method": "random_forest"
+            "method": method
         }
     except Exception as e:
         # If model prediction fails for any reason, use heuristic
