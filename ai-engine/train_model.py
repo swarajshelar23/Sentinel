@@ -7,6 +7,7 @@ from malware_model import save_model
 
 try:
     import numpy as np
+    import joblib
     from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
     from sklearn.neural_network import MLPClassifier
     from sklearn.model_selection import train_test_split
@@ -72,7 +73,7 @@ def generate_robust_synthetic_data(count=100):
         
     return X, y
 
-def train_model(benign_dir=None, malware_dir=None, dataset_file=None, architecture='rf'):
+def train_model(benign_dir=None, malware_dir=None, dataset_file=None, architecture='RandomForest', output_path=None):
     if not HAS_ML_LIBS:
         print("Error: scikit-learn and numpy are required for training.")
         return
@@ -123,14 +124,14 @@ def train_model(benign_dir=None, malware_dir=None, dataset_file=None, architectu
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Select Architecture
-    if architecture == 'gb':
+    if architecture == 'GradientBoosting':
         print("Training GradientBoostingClassifier...")
         model = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
-    elif architecture == 'nn':
+    elif architecture == 'NeuralNetwork':
         print("Training Neural Network (MLPClassifier)...")
         model = MLPClassifier(hidden_layer_sizes=(16, 8), max_iter=500, random_state=42)
     else:
-        print("Training RandomForestClassifier (Default)...")
+        print("Training RandomForestClassifier...")
         model = RandomForestClassifier(n_estimators=100, random_state=42)
 
     # Create Pipeline
@@ -150,15 +151,20 @@ def train_model(benign_dir=None, malware_dir=None, dataset_file=None, architectu
     print(classification_report(y_test, y_pred))
 
     # Save
-    save_model(clf)
-    print(f"\nModel saved successfully.")
+    if output_path:
+        joblib.dump(clf, output_path)
+        print(f"\nModel saved to {output_path}")
+    else:
+        save_model(clf)
+        print(f"\nModel saved successfully via default handler.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train Malware Detection AI Model')
     parser.add_argument('--benign', help='Directory containing benign file samples')
     parser.add_argument('--malware', help='Directory containing malware file samples')
     parser.add_argument('--dataset', help='JSON file containing pre-extracted features')
-    parser.add_argument('--arch', choices=['rf', 'gb', 'nn'], default='rf', help='Model architecture (rf: Random Forest, gb: Gradient Boosting, nn: Neural Network)')
+    parser.add_argument('--output', help='Path to save the trained model (.pkl)')
+    parser.add_argument('--arch', choices=['RandomForest', 'GradientBoosting', 'NeuralNetwork'], default='RandomForest', help='Model architecture')
     
     args = parser.parse_args()
     
@@ -167,4 +173,4 @@ if __name__ == "__main__":
         print("Please install them using: pip install numpy scikit-learn joblib")
         sys.exit(1)
 
-    train_model(args.benign, args.malware, args.dataset, args.arch)
+    train_model(args.benign, args.malware, args.dataset, args.arch, args.output)
