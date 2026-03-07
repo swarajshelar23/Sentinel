@@ -56,8 +56,12 @@ async function startServer() {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: "Unauthorized" });
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const user = db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(decoded.id);
+      if (!user) {
+        return res.status(401).json({ error: "User no longer exists" });
+      }
+      req.user = user;
       next();
     } catch (err) {
       res.status(401).json({ error: "Invalid token" });

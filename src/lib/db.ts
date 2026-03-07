@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 
 const db = new Database('malware_scanner.db');
+db.pragma('foreign_keys = ON');
 
 // Initialize tables
 db.exec(`
@@ -32,7 +33,7 @@ db.exec(`
     confidence_score REAL,
     status TEXT DEFAULT 'completed',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS logs (
@@ -43,7 +44,7 @@ db.exec(`
     metadata TEXT,
     ip_address TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS file_intelligence (
@@ -66,7 +67,7 @@ db.exec(`
     error TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 `);
 

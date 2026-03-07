@@ -41,9 +41,14 @@ export default function Dashboard() {
       const { data } = await axios.get('/api/scan/queue', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setQueue(data);
+      if (Array.isArray(data)) {
+        setQueue(data);
+      } else {
+        setQueue([]);
+      }
     } catch (err) {
       console.error('Failed to fetch queue');
+      setQueue([]);
     }
   }, []);
 
