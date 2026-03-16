@@ -1,5 +1,5 @@
 import db from '../lib/db.js';
-import { performScan, calculateThreatScore, getAiPrediction } from '../lib/scanner.js';
+import { performScan, calculateThreatScore, getAiPrediction, isSafeFileType } from '../lib/scanner.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -50,8 +50,9 @@ export class ScanQueueService {
           features.ai_prediction = aiResult.prediction;
           db.prepare("UPDATE scan_queue SET progress = 70 WHERE id = ?").run(job.id);
 
-          // Threat Score
-          const report = calculateThreatScore(features);
+          // Threat Score with Multi-Stage Detection Pipeline
+          const safeFileType = isSafeFileType(features.filename);
+          const report = calculateThreatScore(features, undefined, undefined, safeFileType);
           db.prepare("UPDATE scan_queue SET progress = 90 WHERE id = ?").run(job.id);
 
           // Store in DB

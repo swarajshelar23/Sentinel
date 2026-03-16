@@ -7,7 +7,7 @@ import multer from "multer";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import db from "./src/lib/db.js";
-import { performScan, calculateThreatScore, getAiPrediction } from "./src/lib/scanner.js";
+import { performScan, calculateThreatScore, getAiPrediction, isSafeFileType } from "./src/lib/scanner.js";
 import axios from "axios";
 import { MonitoringService } from "./src/monitoring/service.js";
 import { AnalyticsService } from "./src/analytics/service.js";
@@ -157,7 +157,9 @@ async function startServer() {
       features.ai_probability = aiResult.probability;
       features.ai_prediction = aiResult.prediction;
 
-      const report = calculateThreatScore(features, vtResults, THREAT_WEIGHTS);
+      // 5. Calculate Threat Score with Multi-Stage Detection Pipeline
+      const safeFileType = isSafeFileType(features.filename);
+      const report = calculateThreatScore(features, vtResults, THREAT_WEIGHTS, safeFileType);
 
       // 5. Malware Family Identification (Mock)
       const malwareFamily = intel.find(i => i.family)?.family || (report.score > 80 ? 'Generic.Malware' : null);

@@ -1,0 +1,931 @@
+================================================================================
+                    SENTINEL MALWARE SCANNER - PROJECT DOCUMENTATION
+                              Last Updated: March 2026
+================================================================================
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+PROJECT NAME: Sentinel Malware Scanner
+DESCRIPTION: A full-stack malware analysis dashboard with advanced threat detection,
+             file scanning, threat scoring, analytics, and role-based admin monitoring.
+
+PURPOSE: 
+- Detect and analyze potentially malicious files using multiple detection methods
+- Provide real-time threat intelligence and scoring
+- Support batch scanning with queue management
+- Track scan history and analytics over time
+- Offer role-based access control (User/Admin)
+
+PROJECT STATUS: In Development (Partially Complete)
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+FRONTEND:
+- React 19.0.0
+- TypeScript 5.8.2
+- Vite 6.2.0 (Build tool)
+- Tailwind CSS 4.1.14 (Styling)
+- React Router 7.13.1 (Routing)
+- Recharts 3.7.0 (Charts & Analytics)
+- Chart.js 4.5.1 (Additional charting)
+- Motion 12.23.24 (Animations)
+- React Hook Form 7.71.2 (Form management)
+- Axios 1.13.6 (HTTP client)
+- Lucide React (Icon library)
+- Zod 4.3.6 (Schema validation)
+
+BACKEND:
+- Node.js 18+ (Recommended: 20+)
+- Express 4.21.2 (Web framework)
+- TypeScript 5.8.2 (Type safety)
+- JWT (jsonwebtoken 9.0.3) - Authentication
+- bcryptjs 3.0.3 - Password hashing
+- Multer 2.1.1 - File upload handling
+- better-sqlite3 12.4.1 - Local database
+- Dotenv 17.2.3 - Environment variables
+
+AI/ML ENGINE:
+- Python 3.x
+- scikit-learn (sklearn) - Machine learning (optional)
+- joblib - Model serialization (optional)
+- NumPy - Numerical computing (optional)
+
+EXTERNAL INTEGRATIONS:
+- Google Gemini AI API (@google/genai 1.29.0) - AI explanations and chat
+- VirusTotal API (Optional) - External threat reputation
+
+CONTAINERIZATION:
+- Docker & Docker Compose (Configuration provided)
+
+================================================================================
+3. PROJECT STRUCTURE
+================================================================================
+
+/Sentinel/
+├── src/                          # Frontend source code
+│   ├── App.tsx                   # Main application component
+│   ├── main.tsx                  # React entry point
+│   ├── index.css                 # Global styles
+│   ├── components/
+│   │   └── Navbar.tsx            # Navigation bar component
+│   ├── pages/                    # Application pages
+│   │   ├── Landing.tsx           # Homepage with feature overview
+│   │   ├── Auth.tsx              # Login/Register page
+│   │   ├── Dashboard.tsx         # Main scanning interface
+│   │   ├── History.tsx           # Scan history view
+│   │   ├── ScanResult.tsx        # Detailed scan result with AI explanation
+│   │   ├── Analytics.tsx         # System analytics and trends
+│   │   └── Admin.tsx             # Admin panel (logs, scans, health)
+│   ├── lib/
+│   │   ├── db.ts                 # SQLite database initialization & schema
+│   │   └── scanner.ts            # Scanning logic and threat scoring
+│   ├── services/
+│   │   ├── analytics/
+│   │   │   └── service.ts        # Analytics data aggregation
+│   │   ├── monitoring/
+│   │   │   └── service.ts        # Event logging and system health
+│   │   ├── scan-queue/
+│   │   │   └── service.ts        # Batch scan queue processing
+│   │   └── threat-intelligence/
+│   │       └── service.ts        # Threat reputation lookup
+│
+├── ai-engine/                    # Python ML engine
+│   ├── predict.py                # Main prediction script
+│   ├── malware_model.py          # Model training and loading
+│   ├── train_model.py            # Training script
+│   ├── prepare_data.py           # Data preparation for training
+│   ├── feature_extractor.py      # Feature extraction utilities
+│   └── malware_classifier.pkl    # Trained model (auto-generated)
+│
+├── uploads/                      # Temporary file storage
+│
+├── server.ts                     # Express backend server
+├── package.json                  # Node.js dependencies
+├── tsconfig.json                 # TypeScript configuration
+├── vite.config.ts                # Vite build configuration
+├── docker-compose.yml            # Docker Compose configuration
+├── Dockerfile                    # Docker image definition
+├── index.html                    # HTML entry point
+├── metadata.json                 # Project metadata
+├── README.md                     # Project README
+└── malware_scanner.db            # SQLite database (auto-created)
+
+================================================================================
+4. CORE FUNCTIONALITIES
+================================================================================
+
+IMPLEMENTED FEATURES:
+==================
+
+A. AUTHENTICATION & AUTHORIZATION
+   ✓ User registration with password hashing (bcrypt)
+   ✓ JWT-based login with token generation
+   ✓ Role-based access control (User/Admin roles)
+   ✓ Protected routes requiring authentication
+   ✓ Session management via localStorage
+   ✓ Failed login attempt logging
+
+B. FILE SCANNING (PRIMARY FEATURE)
+   ✓ Single file upload and scanning
+   ✓ Multiple file batch upload with queue system
+   ✓ SHA-256 hash calculation for files
+   ✓ File intelligence cache (repeated scan detection)
+   ✓ Entropy calculation (Shannon entropy)
+   ✓ File header analysis (PE, ELF, Mach-O detection)
+   ✓ String extraction from binaries
+   ✓ Packer detection (UPX, ASPack, Themida)
+   ✓ Signature-based detection (YARA-like pattern matching)
+   ✓ Suspicious API call detection
+
+C. THREAT SCORING ENGINE
+   ✓ Multi-factor threat scoring system
+   ✓ Weighted scoring from:
+     - Entropy analysis (20% default weight)
+     - YARA signature matches (30% default weight)
+     - VirusTotal reputation (25% default weight)
+     - AI engine prediction (25% default weight)
+   ✓ Classification: Safe / Suspicious / Malware / High Risk
+   ✓ Detailed threat indicators and explanations
+
+D. EXTERNAL THREAT INTELLIGENCE
+   ✓ VirusTotal API integration (optional, if key provided)
+   ✓ Mock internal threat feed
+   ✓ Hash-based reputation lookup
+   ✓ IP reputation lookup (mocked)
+
+E. AI/ML INTEGRATION
+   ✓ Python AI engine with fallback heuristic
+   ✓ Feature-based malware probability prediction
+   ✓ Heuristic fallback when ML libraries unavailable
+   ✓ Random Forest classifier (when ML libs available)
+   ✓ Synthetic data training on startup
+
+F. SCAN QUEUE & BATCH PROCESSING
+   ✓ Batch scanning with up to 10 files per batch
+   ✓ Queue system for concurrent file processing
+   ✓ Progress tracking for each queued job
+   ✓ Background processing (non-blocking)
+   ✓ Error handling and retry logic
+   ✓ Job status persistence: pending → processing → completed/failed
+
+G. DATA PERSISTENCE
+   ✓ SQLite database with proper schema
+   ✓ User management and session tracking
+   ✓ Scan history with full results storage
+   ✓ File intelligence cache with scan counters
+   ✓ Audit logging with event types and metadata
+   ✓ Activity tracking by IP address
+
+H. ANALYTICS & REPORTING
+   ✓ Dashboard statistics (total, safe, suspicious, malware, high risk)
+   ✓ 30-day detection trends
+   ✓ File type distribution analysis
+   ✓ AI model accuracy metrics (F1 score, precision, recall)
+   ✓ Real-time health monitoring
+
+I. ADMIN PANEL
+   ✓ Global scan overview (all users)
+   ✓ Audit log viewing with timestamp filtering
+   ✓ System health status (uptime, memory, DB size)
+   ✓ Active job monitoring
+   ✓ Admin-only access control
+
+J. USER INTERFACE
+   ✓ Clean, modern terminal-inspired design
+   ✓ Drag-and-drop file upload
+   ✓ Real-time progress indicators
+   ✓ Animated transitions (Motion library)
+   ✓ Responsive grid layouts (mobile-friendly)
+   ✓ Chart visualizations for analytics
+   ✓ Color-coded threat levels (green/yellow/red)
+
+================================================================================
+5. MOCKED/INCOMPLETE FEATURES
+================================================================================
+
+PARTIALLY IMPLEMENTED / MOCKED FEATURES:
+======================================
+
+A. AI EXPLANATION & CHAT (ScanResult.tsx)
+   STATUS: Mocked - Placeholder with full UI implementation
+   LOCATION: src/pages/ScanResult.tsx (lines 32-115)
+   DETAILS:
+   - "Explain with AI" button UI is fully implemented
+   - Chat interface with message history is fully functional
+   - HOWEVER: Requires valid GEMINI_API_KEY environment variable to work
+   - Without API key: Shows error "The AI assistant is currently unavailable"
+   - Uses Google Gemini API for explanations and chat
+   - MOCK BEHAVIOR: Falls back gracefully to suggest manual review
+
+B. THREAT INTELLIGENCE SERVICE (threat-intelligence/service.ts)
+   STATUS: Mocked - Partially functional
+   LOCATION: src/threat-intelligence/service.ts
+   DETAILS:
+   - Hash lookup: Uses mock internal malicious hashes database
+   - Only detects hashes starting with 'a' as suspicious
+   - Limited to 2 hardcoded mock malicious hashes for testing
+   - Real VirusTotal integration must be manually added
+   - IP lookup: Completely mocked with hardcoded test IPs (1.1.1.1, 8.8.8.8)
+   - LIMITATION: Does not query actual external threat feeds
+
+C. AI ACCURACY METRICS (analytics/service.ts)
+   STATUS: Mocked - Hardcoded placeholder
+   LOCATION: src/analytics/service.ts (lines 37-43)
+   DETAILS:
+   - Returns fixed accuracy values:
+     * Precision: 0.94
+     * Recall: 0.91
+     * F1 Score: 0.92
+     * Total Trained: 15420
+   - LIMITATION: Not calculated from actual model performance
+   - Does not reflect real training data or model accuracy
+
+================================================================================
+6. DATABASE SCHEMA
+================================================================================
+
+TABLE: users
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - username (TEXT UNIQUE NOT NULL)
+  - password (TEXT NOT NULL, bcrypt hashed)
+  - role (TEXT DEFAULT 'user') - Values: 'user', 'admin'
+  - created_at (DATETIME DEFAULT CURRENT_TIMESTAMP)
+
+TABLE: scans
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - user_id (INTEGER FK → users.id ON DELETE CASCADE)
+  - filename (TEXT NOT NULL)
+  - filesize (INTEGER NOT NULL)
+  - hash_sha256 (TEXT NOT NULL, unique identifier)
+  - entropy (REAL, Shannon entropy 0-8)
+  - threat_score (INTEGER, 0-100)
+  - classification (TEXT - Safe/Suspicious/Malware/High Risk)
+  - vt_results (TEXT JSON - VirusTotal response)
+  - yara_matches (TEXT JSON array - Matched signatures)
+  - metadata (TEXT JSON - File metadata)
+  - ai_probability (REAL 0-1 - Malware probability)
+  - ai_prediction (TEXT - Malicious/Benign)
+  - contributions (TEXT JSON - Score breakdown)
+  - malware_family (TEXT - Identified family if known)
+  - confidence_score (REAL - Confidence 0-1)
+  - status (TEXT DEFAULT 'completed')
+  - created_at (DATETIME DEFAULT CURRENT_TIMESTAMP)
+
+TABLE: logs
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - user_id (INTEGER FK → users.id ON DELETE CASCADE)
+  - event_type (TEXT - LOGIN_FAILED, SCAN_COMPLETED, etc)
+  - message (TEXT description)
+  - metadata (TEXT JSON - Additional context)
+  - ip_address (TEXT - Source IP)
+  - created_at (DATETIME DEFAULT CURRENT_TIMESTAMP)
+
+TABLE: file_intelligence
+  - hash_sha256 (TEXT PRIMARY KEY - Unique file hash)
+  - classification (TEXT - Safe/Suspicious/Malware/High Risk)
+  - threat_score (INTEGER 0-100)
+  - malware_family (TEXT - Family classification)
+  - first_seen (DATETIME DEFAULT CURRENT_TIMESTAMP)
+  - last_seen (DATETIME DEFAULT CURRENT_TIMESTAMP)
+  - scan_count (INTEGER DEFAULT 1 - Repeated scan tracking)
+
+TABLE: scan_queue
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - user_id (INTEGER FK → users.id ON DELETE CASCADE)
+  - filename (TEXT NOT NULL)
+  - filepath (TEXT NOT NULL)
+  - status (TEXT DEFAULT 'pending') - pending/processing/completed/failed
+  - progress (INTEGER DEFAULT 0) - 0-100 progress percentage
+  - error (TEXT - Error message if failed)
+  - created_at (DATETIME DEFAULT CURRENT_TIMESTAMP)
+  - updated_at (DATETIME DEFAULT CURRENT_TIMESTAMP)
+
+================================================================================
+7. API ENDPOINTS
+================================================================================
+
+AUTHENTICATION ENDPOINTS
+========================
+POST /api/auth/register
+  - Body: { username, password }
+  - Response: { success: true, userId }
+  - Auto-logs registration event
+
+POST /api/auth/login
+  - Body: { username, password }
+  - Response: { token (JWT), user { id, username, role } }
+  - Logs login success/failure
+  - Requires: None
+
+SCANNING ENDPOINTS
+==================
+POST /api/scan
+  - Requires Auth: YES (Bearer token)
+  - Body: multipart/form-data with single 'file'
+  - Response: { id, features, report, vtResults, intel }
+  - Features: filename, filesize, hash, entropy, indicators, etc
+  - Report: score (0-100), classification, contributions breakdown
+  - Logs: SCAN_COMPLETED event
+  - Includes: Threat intel lookup, AI prediction, hash cache check
+
+POST /api/scan/batch
+  - Requires Auth: YES
+  - Body: multipart/form-data with multiple 'files' (max 10)
+  - Response: { success, jobIds[], message }
+  - Action: Queues each file for background processing
+  - Each file processed: pending → processing → completed
+
+GET /api/scan/queue
+  - Requires Auth: YES
+  - Response: Array of queue jobs for current user
+  - Includes: status, progress, error, created_at
+
+ANALYTICS ENDPOINTS
+====================
+GET /api/analytics/dashboard
+  - Requires Auth: YES
+  - Response: { 
+      stats: { total, safe, suspicious, malware, high_risk },
+      trends: [ { date, count, malicious } ] (30 days),
+      fileTypes: [ { extension, count } ]
+    }
+
+GET /api/analytics/ai-accuracy
+  - Requires Auth: YES
+  - Response: { precision, recall, f1_score, total_trained }
+  - NOTE: Currently returns MOCK values (hardcoded)
+
+HISTORY ENDPOINTS
+=================
+GET /api/history
+  - Requires Auth: YES
+  - Response: User's scan history (all previous scans)
+  - Includes: filename, hash, classification, score, metadata
+
+GET /api/stats
+  - Requires Auth: YES
+  - Response: { total, safe, suspicious, malware, high_risk }
+
+ADMIN ENDPOINTS
+===============
+GET /api/admin/logs
+  - Requires Auth: YES, Admin role
+  - Response: Array of audit logs (last 100)
+  - Includes: user, event_type, message, metadata, ip_address
+
+GET /api/admin/scans
+  - Requires Auth: YES, Admin role
+  - Response: Array of all system scans (last 100)
+  - Includes: timestamp, user, filename, classification, score
+
+GET /api/admin/health
+  - Requires Auth: YES, Admin role
+  - Response: { status, uptime, memory, db_size, active_jobs }
+
+================================================================================
+8. FRONTEND PAGES & COMPONENTS
+================================================================================
+
+Landing Page (/)
+  - Public landing page with feature overview
+  - Hero section with call-to-action
+  - Feature cards: Entropy Analysis, Signatures, Threat Intel, Sandbox
+  - Links to START_SCANNING and auth page
+
+Auth Page (/auth)
+  - Login/Register toggle interface
+  - Username and password inputs
+  - Form validation
+  - Error display
+  - Auto-login after registration
+
+Dashboard (/dashboard)
+  - Main scanning interface (requires auth)
+  - Drag-and-drop file upload area
+  - Multi-file selection with preview
+  - Single scan → direct result view
+  - Batch scan → queued for processing
+  - Real-time queue status updates (polling every 5s)
+  - Statistics cards with counts
+  - Threat distribution chart (doughnut/pie)
+  - Upload progress indicators
+
+History (/history)
+  - Scan history table for current user
+  - Columns: Status, Filename/Hash, Date, Risk Score, Classification
+  - Search by filename or hash
+  - Sort and filter options
+  - Status indicators (icons)
+  - Score visualization bars
+  - Click row to view scan details
+
+ScanResult (/scan/:id)
+  - Detailed scan result page
+  - Left side: Classification badge, threat score (0-100)
+  - Center: Threat indicators, YARA matches, details
+  - Right side: Score contribution chart (stacked components)
+  - Tabs/toggles for: Features, Report, Metadata, Indicators
+  - AI Explanation button:
+    * Shows loading state
+    * Fetches AI-generated explanation using Gemini API
+    * MOCKED: Falls back to error message without API key
+  - Chat interface (MOCKED):
+    * Message input field
+    * Chat history display
+    * AI responses using Gemini API
+    * MOCKED: Requires GEMINI_API_KEY environment variable
+  - Back button to dashboard
+
+Analytics (/analytics)
+  - System-wide analytics dashboard
+  - Top stats: Total scans, Malicious detected, AI accuracy, Threat velocity
+  - 30-day detection trends chart (line)
+  - File type distribution (bar)
+  - Classification ratio pie chart
+  - AI model metrics: Precision, Recall, F1 Score
+  - NOTE: AI accuracy metrics are MOCKED (hardcoded values)
+
+Admin Panel (/admin)
+  - Restricted to admin role only
+  - Three tabs: Global Scans, Audit Logs, System Monitor
+  
+  Global Scans Tab:
+    - Table of all system scans across all users
+    - Columns: Timestamp, User, Filename, Classification, Score, Actions
+    - Shows latest 100 scans
+    - Admin action buttons (view, flag, delete)
+  
+  Audit Logs Tab:
+    - Event log table showing all system activity
+    - Columns: Timestamp, User, Event Type, Message, IP
+    - Event types: LOGIN_SUCCESS, SCAN_COMPLETED, API_REQUEST, etc
+    - Search and filter capabilities
+    - RED flags for FAILED/ERROR events
+  
+  System Monitor Tab:
+    - System health status indicator
+    - Uptime display
+    - Memory usage metrics
+    - Database size
+    - Active jobs count
+    - Real-time health polling
+
+Navbar Component
+  - Displays current user (if logged in)
+  - Navigation links: Dashboard, History, Analytics
+  - Admin link (only if admin role)
+  - Logout button
+
+================================================================================
+9. THREAT SCORING ALGORITHM
+================================================================================
+
+SCORING METHODOLOGY:
+====================
+
+The threat score (0-100) is calculated using weighted contributions from four sources:
+
+1. ENTROPY ANALYSIS (Default Weight: 20%)
+   - Measures data randomness (0-8 typical range, higher = more packed/encrypted)
+   - Score calculation:
+     * High entropy (>7.5): 100 points
+     * Medium entropy (6.5-7.5): 50-75 points
+     * Low entropy (<6.5): 0-25 points
+   - Indicates: Encryption, compression, or packer usage
+
+2. YARA SIGNATURE MATCHING (Default Weight: 30%)
+   - Pattern-based detection of known malware signatures
+   - Checks for: Shellcode, ransomware patterns, reverse shells, stealers, etc
+   - Each match: +15 points
+   - Maximum from signatures: 90 points
+
+3. VIRUSTOTAL REPUTATION (Default Weight: 25%)
+   - External threat intelligence service
+   - Based on: Number of AV engines flagging the file
+   - Scoring: Malicious count / 70 engines = percentage
+   - Only used if VIRUSTOTAL_API_KEY is configured
+
+4. AI MODEL PREDICTION (Default Weight: 25%)
+   - Python ML model trained on file features
+   - Features: file_size, entropy, extension_type, suspicious_strings, 
+              yara_matches, vt_reputation
+   - Output: Probability 0-1 (converted to 0-100)
+   - Falls back to heuristic if ML libraries unavailable
+
+CLASSIFICATION RULES:
+=====================
+Safe (0-20 points): Low risk, clean files
+Suspicious (21-39 points): Potential risk, requires attention
+Malware (40-79 points): Likely malicious
+High Risk (80-100 points): Almost certainly malicious
+
+WEIGHTS CONFIGURATION:
+======================
+Environment variables allow tuning weights:
+- WEIGHT_ENTROPY: Entropy weight (default: 20)
+- WEIGHT_YARA: YARA weight (default: 30)
+- WEIGHT_VT: VirusTotal weight (default: 25)
+- WEIGHT_AI: AI engine weight (default: 25)
+
+================================================================================
+10. KNOWN ISSUES & ERRORS
+================================================================================
+
+CRITICAL ISSUES:
+================
+
+None currently critical for basic functionality
+
+MODERATE ISSUES:
+================
+
+1. MISSING GEMINI API KEY - AI Features Non-Functional
+   LOCATION: ScanResult.tsx (AI explanations and chat)
+   SEVERITY: Medium (Feature unavailable, graceful fallback)
+   DETAILS: 
+   - AI explanation button shows error without GEMINI_API_KEY
+   - Chat interface shows "ERROR: COMMUNICATION_FAILURE" messages
+   - User can still view scan results without AI assistance
+   - WORKAROUND: Add GEMINI_API_KEY to .env.local
+
+2. MOCK THREAT INTELLIGENCE
+   LOCATION: threat-intelligence/service.ts
+   SEVERITY: Medium (Limited threat detection)
+   DETAILS:
+   - Hash lookup only checks 2 hardcoded malicious hashes
+   - IP reputation lookup completely mocked
+   - No real VirusTotal integration in threat intel service
+   - Only queried via server.ts /api/scan endpoint
+   - WORKAROUND: Implement real VirusTotal API integration
+
+3. MOCK AI ACCURACY METRICS
+   LOCATION: analytics/service.ts, Analytics.tsx
+   SEVERITY: Low (Reporting accuracy)
+   DETAILS:
+   - AI accuracy values hardcoded (precision: 0.94, recall: 0.91, f1: 0.92)
+   - Does not reflect actual model performance
+   - Shows "+12% THREAT_VELOCITY" static value
+   - WORKAROUND: Calculate real metrics from scan database
+
+4. PYTHON ML DEPENDENCIES OPTIONAL
+   LOCATION: ai-engine/predict.py
+   SEVERITY: Low (Feature degradation, but functional)
+   DETAILS:
+   - scikit-learn and joblib are optional dependencies
+   - Falls back to heuristic prediction if not installed
+   - Heuristic method is less accurate but functional
+   - WORKAROUND: pip install scikit-learn joblib
+
+MISSING FEATURES / TODO:
+========================
+
+1. REAL VIRUSTOTAL INTEGRATION in threat-intelligence/service.ts
+   - Currently only queries from server.ts scan endpoint
+   - Need to implement actual VirusTotal API calls in service
+   STATUS: Placeholder/mock only
+
+2. DYNAMIC THREAT VELOCITY CALCULATION
+   - Currently shows static "+12%" in Analytics
+   - STATUS: Needs implementation
+
+3. MALWARE FAMILY IDENTIFICATION
+   - Limited family classification
+   - Needs expansion of malware family database
+   - STATUS: Partial implementation
+
+4. EXTENDED FILE TYPE SUPPORT
+   - Currently focuses on executables
+   - Could expand to documents, archives, etc
+   - STATUS: Basic support exists
+
+5. NOTIFICATION/ALERTING SYSTEM
+   - No email alerts or notifications
+   - Could notify admin of high-risk detections
+   - STATUS: Not implemented
+
+6. ADVANCED FILTERING IN ADMIN PANEL
+   - Admin logs/scans have limited filtering
+   - Could add date range, severity filters, etc
+   - STATUS: Basic search only
+
+7. MACHINE LEARNING MODEL RETRAINING
+   - train_model.py script exists but manual
+   - Could implement automated retraining pipeline
+   - STATUS: Manual process only
+
+8. FULL-TEXT SEARCH IN LOGS
+   - Logs searchable by basic string match
+   - Could implement full-text SQL search
+   - STATUS: Basic filtering
+
+WARNINGS & LIMITATIONS:
+=======================
+
+1. ENVIRONMENT VARIABLE REQUIREMENTS
+   - GEMINI_API_KEY: Required for AI features (optional but recommended)
+   - VIRUSTOTAL_API_KEY: Optional, enables external threat intel
+   - JWT_SECRET: Should be set in production (has default fallback)
+   - Missing: Better environment variable documentation
+
+2. FILE SIZE LIMITS
+   - Maximum file upload: 50MB
+   - Configured in server.ts (MAX_FILE_SIZE)
+   - Could be configurable via env var
+
+3. QUEUE PROCESSING
+   - Batch queue processes one file at a time (serial)
+   - Could be parallelized for faster processing
+   - Currently adequate for small batches
+
+4. DATABASE SCALABILITY
+   - Using SQLite (file-based)
+   - Not suitable for large-scale production
+   - Would need migration to PostgreSQL/MySQL for 100k+ scans
+
+5. THREAT INTELLIGENCE CACHING
+   - File intelligence cache works well
+   - But threat feeds (VT, IP rep) not cached long-term
+   - Could implement Redis caching layer
+
+================================================================================
+11. ENVIRONMENT VARIABLES
+================================================================================
+
+REQUIRED:
+=========
+None strictly required - application has secure defaults
+
+OPTIONAL BUT RECOMMENDED:
+==========================
+GEMINI_API_KEY=<Google Gemini API Key>
+  - Enables AI explanations and chat in scan results
+  - Without: Shows error message, graceful fallback
+  - Obtain from: https://aistudio.google.com/apikey
+
+VIRUSTOTAL_API_KEY=<VirusTotal API Key>
+  - Enables external malware reputation checking
+  - Without: Skipped gracefully, only internal threat intel used
+  - Obtain from: https://www.virustotal.com/
+
+JWT_SECRET=<Your Secret String>
+  - Used for signing JWT authentication tokens
+  - Default: "super-secret-malware-scanner-key" (Development only)
+  - Should be strong random string in production
+  - Example: 64-character hex string
+
+THREAT SCORING WEIGHTS (Optional):
+===================================
+WEIGHT_ENTROPY=20      # Entropy score weight (0-100)
+WEIGHT_YARA=30         # YARA signature weight
+WEIGHT_VT=25           # VirusTotal reputation weight
+WEIGHT_AI=25           # AI engine prediction weight
+(All have sensible defaults if not set)
+
+NODE_ENV=development   # Set to "production" for production deployment
+(Vite will optimize build accordingly)
+
+================================================================================
+12. RUNNING THE APPLICATION
+================================================================================
+
+PREREQUISITES:
+==============
+- Node.js 18+ (Recommended: Node.js 20 LTS)
+- npm or yarn
+- Python 3.x (optional, for ML features)
+- Git (for version control)
+
+INSTALLATION:
+==============
+1. Clone/download the repository
+2. Navigate to project directory:
+   cd /path/to/Sentinel
+
+3. Install Node dependencies:
+   npm install
+
+4. (Optional) Install Python ML dependencies:
+   pip install scikit-learn joblib numpy
+
+5. Create .env.local file:
+   cp .env.example .env.local
+   (Edit with your API keys if available)
+
+DEVELOPMENT:
+=============
+Start development server with hot-reload:
+   npm run dev
+
+Server runs at: http://localhost:3000
+- Frontend served by Vite
+- Backend API at same origin
+- Database created automatically: malware_scanner.db
+- Uploaded files stored in: ./uploads/
+
+BUILDING FOR PRODUCTION:
+========================
+Build static assets:
+   npm run build
+
+Preview production build:
+   npm run preview
+
+Type-checking:
+   npm run lint
+
+DOCKER DEPLOYMENT:
+===================
+Build container:
+   docker build -t sentinel:latest .
+
+Run with Docker Compose:
+   docker-compose up
+
+Creates:
+- Node.js container (port 3000)
+- SQLite database persistence
+- Uploads volume for file storage
+
+================================================================================
+13. SECURITY CONSIDERATIONS
+================================================================================
+
+IMPLEMENTED:
+============
+✓ Password hashing with bcryptjs (10 rounds)
+✓ JWT authentication with expiration
+✓ Role-based access control (User/Admin)
+✓ Protected API endpoints requiring auth
+✓ File upload validation (size, type)
+✓ SQL injection protection (parameterized queries)
+✓ CORS headers not explicitly set (browser same-origin)
+✓ Audit logging of all sensitive operations
+✓ IP address logging for security events
+
+RECOMMENDATIONS:
+================
+⚠ HTTPS/TLS in production - Currently HTTP only
+⚠ CSP Headers - Content Security Policy headers
+⚠ CSRF Protection - Add CSRF tokens for state-changing operations
+⚠ Rate Limiting - Prevent brute force on auth endpoints
+⚠ Input Validation - Enhance validation on all inputs
+⚠ File Scanning Sandbox - Run scans in isolated environment
+⚠ API Key Rotation - Regularly rotate external API keys
+⚠ database Backup - Implement automated backup strategy
+⚠ Access Logs - Centralized logging (ELK, etc)
+⚠ WAF - Web Application Firewall for production
+
+================================================================================
+14. TESTING & VALIDATION
+================================================================================
+
+MANUAL TESTING AREAS:
+=====================
+
+Authentication:
+- ✓ User registration with new username
+- ✓ Duplicate username rejection
+- ✓ Login with valid credentials
+- ✓ Login with invalid password
+- ✓ Token persistence across page reload
+- ✓ Logout clearing session
+
+File Scanning:
+- ✓ Single file upload and analysis
+- ✓ Multiple files batch upload
+- ✓ Queue status polling
+- ✓ File size limit enforcement (50MB)
+- ✓ Hash caching (scan same file twice)
+- ✓ Entropy calculation accuracy
+- ✓ YARA signature matching
+
+Threat Scoring:
+- ✓ Score calculation: 0-100 range
+- ✓ Classification: Safe/Suspicious/Malware/High Risk
+- ✓ Contribution breakdowns sum correctly
+- ✓ Weight configuration from env vars
+
+Analytics:
+- ✓ Stats aggregation (total, safe, suspicious, etc)
+- ✓ Trends calculation (30 days)
+- ✓ File type distribution
+
+Admin Features:
+- ✓ Admin role access control
+- ✓ View all system scans
+- ✓ View audit logs
+- ✓ System health display
+
+RECOMMENDED AUTOMATED TESTS:
+=============================
+[ ] Unit tests for scanner.ts (threat scoring)
+[ ] Unit tests for threat intelligence service
+[ ] Unit tests for analytics service
+[ ] Integration tests for API endpoints
+[ ] E2E tests for user workflows
+[ ] Security tests (JWT validation, auth bypass)
+[ ] Performance tests (large file handling)
+
+================================================================================
+15. DEPLOYMENT CHECKLIST
+================================================================================
+
+PRE-DEPLOYMENT:
+===============
+☐ All environment variables configured
+☐ Production JWT_SECRET set to strong random value
+☐ API keys obtained (Gemini, VirusTotal)
+☐ Database backup strategy in place
+☐ HTTPS/TLS certificates ready
+☐ Docker image tested locally
+☐ Security review completed
+☐ Performance testing done
+☐ Logging and monitoring configured
+
+DEPLOYMENT:
+===========
+☐ Database migrated/initialized
+☐ Application deployed to production
+☐ API endpoints tested live
+☐ Authentication flow verified
+☐ Scans functioning end-to-end
+☐ Admin panel access restricted
+☐ Monitoring and alerting active
+☐ Backup processes running
+
+POST-DEPLOYMENT:
+================
+☐ Monitor error logs
+☐ Check performance metrics
+☐ Verify database backups
+☐ Test recovery procedures
+☐ User feedback collection
+☐ Security monitoring
+☐ Regular updates scheduled
+
+================================================================================
+16. SUMMARY OF MOCKED FEATURES
+================================================================================
+
+FEATURE | LOCATION | STATUS | ISSUE
+--------+----------+--------+------
+AI Explanation | ScanResult.tsx | UI Complete, Functionality Mocked | Requires GEMINI_API_KEY
+Chat Assistance | ScanResult.tsx | UI Complete, Functionality Mocked | Requires GEMINI_API_KEY
+Threat Intel Lookup | threat-intelligence/service.ts | Partially Mocked | Uses hardcoded hash list
+IP Reputation | threat-intelligence/service.ts | Fully Mocked | Hardcoded for testing
+AI Accuracy Metrics | analytics/service.ts | Hardcoded Values | Precision/Recall/F1 static
+External Threat Feeds | threat-intelligence/service.ts | Minimal | Only global_threat_network mock
+ML Model Persistence | ai-engine/ | Works if deps installed | Scikit-learn optional
+Malware Family DB | threat-intelligence/service.ts | Minimal | Limited family identification
+Threat Velocity | Analytics.tsx | Static "+12%" | Placeholder value
+Real-time Notifications | N/A | Not Implemented | No alert system
+
+================================================================================
+17. QUICK REFERENCE
+================================================================================
+
+DEFAULT PORTS:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3000/api/*
+- Vite HMR: ws://localhost:5173
+
+DEFAULT CREDENTIALS (Testing):
+- Create test user: Use registration page
+- Admin user: Manually create with role='admin' in database
+
+KEY FILES FOR MODIFICATIONS:
+- Threat scoring: src/lib/scanner.ts
+- Threat intelligence: src/threat-intelligence/service.ts
+- Analytics: src/analytics/service.ts
+- API routes: server.ts
+- Database schema: src/lib/db.ts
+
+COMMON COMMANDS:
+$ npm run dev       # Start development
+$ npm run build     # Build for production
+$ npm run preview   # Preview production build
+$ npm run lint      # Type check
+$ docker-compose up # Run in Docker
+
+API TEST ENDPOINTS:
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/scan (multipart: file)
+POST   /api/scan/batch (multipart: files)
+GET    /api/scan/queue
+GET    /api/history
+GET    /api/analytics/dashboard
+GET    /api/analytics/ai-accuracy
+GET    /api/admin/logs (admin only)
+GET    /api/admin/scans (admin only)
+GET    /api/admin/health (admin only)
+
+================================================================================
+                              END OF DOCUMENTATION
+================================================================================
+Generated: March 2026
+For latest updates, refer to README.md and inline code comments

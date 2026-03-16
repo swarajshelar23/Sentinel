@@ -22,6 +22,15 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    // Set dynamic page title based on user state
+    if (user) {
+      document.title = 'Sentinel Prime | Advanced Malware Analysis Platform';
+    } else {
+      document.title = 'Sentinel Prime | Advanced Malware Analysis Platform';
+    }
+  }, [user]);
+
   const logout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');

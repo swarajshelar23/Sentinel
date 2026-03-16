@@ -52,8 +52,17 @@ export default function ScanResult() {
 
   const handleExplain = async () => {
     setExplaining(true);
+    
+    // Check if API key is available
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey.includes('YOUR_')) {
+      setExplanation("⚠️ AI Explanation is not configured.\n\nTo enable AI-powered explanations, set your GEMINI_API_KEY in the .env.local file:\n\nVITE_GEMINI_API_KEY=your_api_key_here\n\nGet a free API key at: https://aistudio.google.com/apikey");
+      setExplaining(false);
+      return;
+    }
+    
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = `
         As a cybersecurity expert, explain the following malware scan result to a user.
         
@@ -87,7 +96,7 @@ export default function ScanResult() {
       setExplanation(response.text || "Unable to generate explanation.");
     } catch (err) {
       console.error('AI Explanation failed:', err);
-      setExplanation("The AI assistant is currently unavailable. Please review the technical details manually.");
+      setExplanation("⚠️ AI service error. Please check:\n1. Your GEMINI_API_KEY is valid\n2. Your internet connection\n3. API quota not exceeded\n\nYou can still review the technical details below.");
     } finally {
       setExplaining(false);
     }
@@ -97,13 +106,23 @@ export default function ScanResult() {
     e.preventDefault();
     if (!chatMessage.trim() || chatting) return;
 
+    // Check if API key is available
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey.includes('YOUR_')) {
+      setChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        text: "⚠️ Chat is not configured.\n\nTo enable the AI chat assistant, add your GEMINI_API_KEY to .env.local:\n\nVITE_GEMINI_API_KEY=your_api_key_here\n\nGet a free API key at: https://aistudio.google.com/apikey" 
+      }]);
+      return;
+    }
+
     const userMsg = chatMessage;
     setChatMessage('');
     setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
     setChatting(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const ai = new GoogleGenAI({ apiKey });
       const systemInstruction = `
         You are the Sentinel AI Assistant. You help users understand malware scan reports.
         You have access to the following scan data:
@@ -126,7 +145,7 @@ export default function ScanResult() {
       setChatHistory(prev => [...prev, { role: 'assistant', text: response.text || "I'm sorry, I couldn't process that request." }]);
     } catch (err) {
       console.error('AI Chat failed:', err);
-      setChatHistory(prev => [...prev, { role: 'assistant', text: 'ERROR: COMMUNICATION_FAILURE' }]);
+      setChatHistory(prev => [...prev, { role: 'assistant', text: '⚠️ API Error: Please check your API key and try again.' }]);
     } finally {
       setChatting(false);
     }

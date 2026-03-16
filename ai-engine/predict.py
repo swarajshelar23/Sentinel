@@ -12,29 +12,59 @@ except ImportError:
     HAS_ML_LIBS = False
 
 def heuristic_predict(features):
-    """Fallback heuristic if ML libraries are missing"""
+    """Fallback heuristic if ML libraries are missing
+    
+    Updated thresholds (Stage 4: AI Model Threshold):
+    - AI probability < 0.40 → SAFE
+    - 0.40 – 0.70 → SUSPICIOUS
+    - > 0.70 → MALWARE
+    """
     score = 0
-    # Entropy (max 0.4)
-    if features['entropy'] > 7.2: score += 0.4
-    elif features['entropy'] > 6.5: score += 0.2
     
-    # Suspicious strings (max 0.3)
-    score += min(features['suspicious_strings'] * 0.1, 0.3)
+    # Entropy thresholds (Stage 2: Updated thresholds)
+    # < 6.5 normal, 6.5-7.2 suspicious, > 7.2 possibly packed
+    if features['entropy'] > 7.2: 
+        score += 0.35
+    elif features['entropy'] > 6.5: 
+        score += 0.15
     
-    # Extension (max 0.1)
-    if features['extension_type'] == 1: score += 0.1
+    # Suspicious strings (max 0.2)
+    # Safe documents should have fewer suspicious strings
+    if features.get('is_safe_file_type', 0):
+        score += min(features['suspicious_strings'] * 0.05, 0.2)
+    else:
+        score += min(features['suspicious_strings'] * 0.1, 0.2)
     
-    # YARA/VT (max 0.2)
-    if features['yara_matches'] > 0: score += 0.1
-    if features['vt_reputation'] > 0: score += 0.1
+    # Extension type (lower impact for documents)
+    if features['extension_type'] == 1: 
+        score += 0.15  # Executable
+    elif features['extension_type'] == 2:
+        score += 0.10  # Script
+    elif features['extension_type'] == 3:
+        score += 0.02  # Document (safe)
+    elif features['extension_type'] == 4:
+        score += 0.01  # Media (safest)
+    
+    # YARA/VT signature matches (Stage 3: VirusTotal Confidence)
+    # Only strong signals count
+    if features['yara_matches'] > 2: 
+        score += 0.15
+    elif features['yara_matches'] > 0: 
+        score += 0.05
+        
+    if features['vt_reputation'] > 5:  # Only if > 5 engines detect
+        score += 0.25
+    elif features['vt_reputation'] > 0: 
+        score += 0.08
     
     return {
         "probability": float(min(score, 1.0)),
-        "prediction": "Malicious" if score > 0.5 else "Benign",
+        "prediction": "Malicious" if score > 0.70 else ("Suspicious" if score > 0.40 else "Benign"),
         "method": "heuristic_fallback"
     }
 
 def predict(features):
+    """Main prediction function with updated thresholds"""
     if not HAS_ML_LIBS:
         return heuristic_predict(features)
         
@@ -53,7 +83,17 @@ def predict(features):
         ]])
         
         probability = model.predict_proba(feature_vector)[0][1]
-        prediction = "Malicious" if probability > 0.5 else "Benign"
+        
+        # Updated thresholds (Stage 4: AI Model Threshold)
+        # < 0.40 → SAFE
+        # 0.40 – 0.70 → SUSPICIOUS
+        # > 0.70 → MALWARE
+        if probability > 0.70:
+            prediction = "Malicious"
+        elif probability > 0.40:
+            prediction = "Suspicious"
+        else:
+            prediction = "Benign"
         
         # Identify model type from pipeline if possible
         method = "ai_model"
