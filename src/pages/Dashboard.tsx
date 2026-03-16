@@ -30,8 +30,13 @@ export default function Dashboard() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setStats(data);
-    } catch (err) {
-      console.error('Failed to fetch stats');
+    } catch (err: any) {
+      console.error('Failed to fetch stats:', err.response?.data || err.message);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/auth';
+      }
     }
   }, []);
 
@@ -46,9 +51,14 @@ export default function Dashboard() {
       } else {
         setQueue([]);
       }
-    } catch (err) {
-      console.error('Failed to fetch queue');
+    } catch (err: any) {
+      console.error('Failed to fetch queue:', err.response?.data || err.message);
       setQueue([]);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/auth';
+      }
     }
   }, []);
 
@@ -216,11 +226,11 @@ export default function Dashboard() {
           <div className="mt-8 space-y-4">
             <div className="flex justify-between items-center border-b border-[#141414]/10 pb-2">
               <span className="font-mono text-xs">TOTAL_SCANS</span>
-              <span className="font-bold">{stats?.total || 0}</span>
+              <span className="font-bold">{stats?.stats?.total || 0}</span>
             </div>
             <div className="flex justify-between items-center border-b border-[#141414]/10 pb-2">
               <span className="font-mono text-xs">MALICIOUS_DETECTED</span>
-              <span className="font-bold text-red-600">{(stats?.malware || 0) + (stats?.high_risk || 0)}</span>
+              <span className="font-bold text-red-600">{(stats?.stats?.malware || 0) + (stats?.stats?.high_risk || 0)}</span>
             </div>
           </div>
         </motion.div>
@@ -230,8 +240,8 @@ export default function Dashboard() {
         {[
           { label: 'SYSTEM_STATUS', value: 'OPERATIONAL', color: 'text-green-600' },
           { label: 'SCAN_ENGINE', value: 'v4.0.0', color: 'text-[#141414]' },
-          { label: 'DB_RECORDS', value: stats?.total || 0, color: 'text-[#141414]' },
-          { label: 'ACTIVE_ALERTS', value: stats?.high_risk || 0, color: 'text-red-600' }
+          { label: 'DB_RECORDS', value: stats?.stats?.total || 0, color: 'text-[#141414]' },
+          { label: 'ACTIVE_ALERTS', value: stats?.stats?.high_risk || 0, color: 'text-red-600' }
         ].map((item, i) => (
           <div key={i} className="border border-[#141414] p-4 bg-white">
             <p className="font-mono text-[10px] uppercase opacity-50 mb-1">{item.label}</p>

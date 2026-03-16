@@ -1,14 +1,14 @@
-import db from '../lib/db';
+import db from '../lib/db.js';
 
 export class AnalyticsService {
   static async getDashboardStats() {
     const stats = db.prepare(`
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN classification = 'Safe' THEN 1 ELSE 0 END) as safe,
-        SUM(CASE WHEN classification = 'Suspicious' THEN 1 ELSE 0 END) as suspicious,
-        SUM(CASE WHEN classification = 'Malware' THEN 1 ELSE 0 END) as malware,
-        SUM(CASE WHEN classification = 'High Risk' THEN 1 ELSE 0 END) as high_risk
+        COALESCE(SUM(CASE WHEN classification = 'Safe' THEN 1 ELSE 0 END), 0) as safe,
+        COALESCE(SUM(CASE WHEN classification = 'Suspicious' THEN 1 ELSE 0 END), 0) as suspicious,
+        COALESCE(SUM(CASE WHEN classification = 'Malware' THEN 1 ELSE 0 END), 0) as malware,
+        COALESCE(SUM(CASE WHEN classification = 'High Risk' THEN 1 ELSE 0 END), 0) as high_risk
       FROM scans
     `).get() as any;
 

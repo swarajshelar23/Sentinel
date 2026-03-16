@@ -1,4 +1,4 @@
-import db from '../lib/db';
+import db from '../lib/db.js';
 
 export class MonitoringService {
   static async logEvent(userId: number | null, eventType: string, message: string, metadata?: any, ip?: string) {

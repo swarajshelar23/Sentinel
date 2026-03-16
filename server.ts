@@ -54,16 +54,21 @@ async function startServer() {
   // --- Auth Middleware ---
   const authenticate = (req: any, res: any, next: any) => {
     const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
+    if (!token) {
+      console.warn("Auth failed: No token provided");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       const user = db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(decoded.id);
       if (!user) {
+        console.warn(`Auth failed: User ${decoded.id} no longer exists`);
         return res.status(401).json({ error: "User no longer exists" });
       }
       req.user = user;
       next();
-    } catch (err) {
+    } catch (err: any) {
+      console.error("Auth failed: Invalid token", err.message);
       res.status(401).json({ error: "Invalid token" });
     }
   };
@@ -205,24 +210,38 @@ async function startServer() {
   app.post("/api/scan/batch", authenticate, upload.array("files", 10), async (req: any, res) => {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: "No files uploaded" });
 
-    const jobIds = [];
-    for (const file of req.files) {
-      const jobId = await ScanQueueService.addToQueue(req.user.id, file.originalname, file.path);
-      jobIds.push(jobId);
+    try {
+      const jobIds = [];
+      for (const file of req.files) {
+        const jobId = await ScanQueueService.addToQueue(req.user.id, file.originalname, file.path);
+        jobIds.push(jobId);
+      }
+      res.json({ success: true, jobIds, message: "Files queued for processing" });
+    } catch (err) {
+      console.error("Batch scan error:", err);
+      res.status(500).json({ error: "Failed to queue batch scan" });
     }
-
-    res.json({ success: true, jobIds, message: "Files queued for processing" });
   });
 
   app.get("/api/scan/queue", authenticate, async (req: any, res) => {
-    const queue = await ScanQueueService.getQueueStatus(req.user.id);
-    res.json(queue);
+    try {
+      const queue = await ScanQueueService.getQueueStatus(req.user.id);
+      res.json(queue);
+    } catch (err) {
+      console.error("Queue fetch error:", err);
+      res.status(500).json({ error: "Failed to fetch scan queue" });
+    }
   });
 
   // --- Analytics & Monitoring ---
   app.get("/api/analytics/dashboard", authenticate, async (req, res) => {
-    const data = await AnalyticsService.getDashboardStats();
-    res.json(data);
+    try {
+      const data = await AnalyticsService.getDashboardStats();
+      res.json(data);
+    } catch (err) {
+      console.error("Dashboard analytics error:", err);
+      res.status(500).json({ error: "Failed to fetch dashboard stats" });
+    }
   });
 
   app.get("/api/analytics/ai-accuracy", authenticate, async (req, res) => {

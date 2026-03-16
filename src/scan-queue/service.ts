@@ -1,5 +1,5 @@
-import db from '../lib/db';
-import { performScan, calculateThreatScore, getAiPrediction } from '../lib/scanner';
+import db from '../lib/db.js';
+import { performScan, calculateThreatScore, getAiPrediction } from '../lib/scanner.js';
 import fs from 'fs';
 import path from 'path';
 

@@ -32,14 +32,15 @@ export default function Analytics() {
   }, []);
 
   if (loading) return <div className="font-mono text-center py-20">FETCHING_ANALYTICS_DATA...</div>;
+  if (!data || !accuracy) return <div className="font-mono text-center py-20 text-red-600 uppercase">Error_Fetching_Analytics_Data</div>;
 
   const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#7f1d1d'];
 
   const pieData = [
-    { name: 'Safe', value: data.stats.safe },
-    { name: 'Suspicious', value: data.stats.suspicious },
-    { name: 'Malware', value: data.stats.malware },
-    { name: 'High Risk', value: data.stats.high_risk }
+    { name: 'Safe', value: data.stats?.safe || 0 },
+    { name: 'Suspicious', value: data.stats?.suspicious || 0 },
+    { name: 'Malware', value: data.stats?.malware || 0 },
+    { name: 'High Risk', value: data.stats?.high_risk || 0 }
   ];
 
   return (
@@ -52,9 +53,9 @@ export default function Analytics() {
       {/* Top Stats */}
       <div className="grid md:grid-cols-4 gap-4">
         {[
-          { label: 'TOTAL_SCANS', value: data.stats.total, icon: FileText, color: 'text-blue-600' },
-          { label: 'MALICIOUS_DETECTED', value: data.stats.malware + data.stats.high_risk, icon: Shield, color: 'text-red-600' },
-          { label: 'AI_ACCURACY', value: `${(accuracy.f1_score * 100).toFixed(1)}%`, icon: Cpu, color: 'text-purple-600' },
+          { label: 'TOTAL_SCANS', value: data.stats?.total || 0, icon: FileText, color: 'text-blue-600' },
+          { label: 'MALICIOUS_DETECTED', value: (data.stats?.malware || 0) + (data.stats?.high_risk || 0), icon: Shield, color: 'text-red-600' },
+          { label: 'AI_ACCURACY', value: `${((accuracy?.f1_score || 0) * 100).toFixed(1)}%`, icon: Cpu, color: 'text-purple-600' },
           { label: 'THREAT_VELOCITY', value: '+12%', icon: TrendingUp, color: 'text-yellow-600' }
         ].map((stat, i) => (
           <motion.div 
@@ -137,7 +138,7 @@ export default function Analytics() {
                   <div className="w-2 h-2" style={{ backgroundColor: COLORS[i] }} />
                   <span className="uppercase">{entry.name}</span>
                 </div>
-                <span className="font-bold">{((entry.value / data.stats.total) * 100).toFixed(1)}%</span>
+                <span className="font-bold">{data.stats?.total ? ((entry.value / data.stats.total) * 100).toFixed(1) : '0.0'}%</span>
               </div>
             ))}
           </div>
@@ -150,7 +151,7 @@ export default function Analytics() {
           <h3 className="font-mono font-bold text-sm mb-8 uppercase">Common_File_Extensions</h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.fileTypes}>
+              <BarChart data={data.fileTypes || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="extension" fontSize={10} fontFamily="monospace" />
                 <YAxis fontSize={10} fontFamily="monospace" />
@@ -168,9 +169,9 @@ export default function Analytics() {
           <h3 className="font-mono font-bold text-sm mb-8 uppercase">AI_Model_Performance</h3>
           <div className="space-y-6">
             {[
-              { label: 'Precision', value: accuracy.precision },
-              { label: 'Recall', value: accuracy.recall },
-              { label: 'F1 Score', value: accuracy.f1_score }
+              { label: 'Precision', value: accuracy?.precision || 0 },
+              { label: 'Recall', value: accuracy?.recall || 0 },
+              { label: 'F1 Score', value: accuracy?.f1_score || 0 }
             ].map((metric, i) => (
               <div key={i}>
                 <div className="flex justify-between items-center mb-2 font-mono text-[10px] uppercase">
@@ -187,7 +188,7 @@ export default function Analytics() {
             ))}
             <div className="pt-4 border-t border-[#141414]/10">
               <p className="font-mono text-[10px] opacity-50 uppercase">Training_Set_Size</p>
-              <p className="font-bold">{accuracy.total_trained.toLocaleString()} SAMPLES</p>
+              <p className="font-bold">{(accuracy?.total_trained || 0).toLocaleString()} SAMPLES</p>
             </div>
           </div>
         </div>
