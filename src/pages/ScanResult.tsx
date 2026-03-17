@@ -10,6 +10,17 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { GoogleGenAI } from "@google/genai";
 
+// Type for Vite environment variables
+interface ImportMetaEnv {
+  VITE_GEMINI_API_KEY?: string;
+}
+
+declare global {
+  interface ImportMeta {
+    env: ImportMetaEnv;
+  }
+}
+
 export default function ScanResult() {
   const { id } = useParams();
   const location = useLocation();
@@ -54,7 +65,7 @@ export default function ScanResult() {
     setExplaining(true);
     
     // Check if API key is available
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey || apiKey.includes('YOUR_')) {
       setExplanation("⚠️ AI Explanation is not configured.\n\nTo enable AI-powered explanations, set your GEMINI_API_KEY in the .env.local file:\n\nVITE_GEMINI_API_KEY=your_api_key_here\n\nGet a free API key at: https://aistudio.google.com/apikey");
       setExplaining(false);
@@ -107,7 +118,7 @@ export default function ScanResult() {
     if (!chatMessage.trim() || chatting) return;
 
     // Check if API key is available
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey || apiKey.includes('YOUR_')) {
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
@@ -446,7 +457,7 @@ export default function ScanResult() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="border border-[#141414] bg-white flex flex-col h-[500px]"
+            className="border border-[#141414] bg-white flex flex-col h-125"
           >
             <div className="p-4 border-b border-[#141414] bg-[#141414] text-[#E4E3E0] flex items-center justify-between">
               <div className="flex items-center gap-2">
