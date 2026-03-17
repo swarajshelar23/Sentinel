@@ -24,7 +24,11 @@ declare global {
 export default function ScanResult() {
   const { id } = useParams();
   const location = useLocation();
-  const scanData = location.state?.scanData;
+  const initialScanData = location.state?.scanData;
+  
+  const [scanData, setScanData] = useState<any>(initialScanData);
+  const [loading, setLoading] = useState(!initialScanData);
+  const [error, setError] = useState<string | null>(null);
   
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explaining, setExplaining] = useState(false);
@@ -33,15 +37,54 @@ export default function ScanResult() {
   const [chatting, setChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Fetch scan data from API if not passed via location.state
+  useEffect(() => {
+    if (initialScanData) {
+      setLoading(false);
+      return;
+    }
+
+    if (!id) {
+      setError('No scan ID provided');
+      setLoading(false);
+      return;
+    }
+
+    const fetchScan = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`/api/scans/${id}`);
+        setScanData(response.data);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch scan:', err);
+        setError('Failed to load scan data. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchScan();
+  }, [id, initialScanData]);
+
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatHistory]);
 
-  if (!scanData) return (
+  // Loading state
+  if (loading) return (
     <div className="text-center py-20">
-      <p className="font-mono mb-4">ERROR: SCAN_DATA_NOT_FOUND</p>
+      <p className="font-mono mb-4">LOADING_SCAN_DATA...</p>
+      <div className="inline-block animate-spin">⟳</div>
+    </div>
+  );
+
+  // Error state
+  if (error || !scanData) return (
+    <div className="text-center py-20">
+      <p className="font-mono mb-4 text-red-600">{error || 'ERROR: SCAN_DATA_NOT_FOUND'}</p>
       <Link to="/dashboard" className="underline font-bold">RETURN_TO_BASE</Link>
     </div>
   );

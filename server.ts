@@ -271,6 +271,54 @@ async function startServer() {
     res.json(scans);
   });
 
+  app.get("/api/scans/:id", authenticate, (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const scan: any = db.prepare("SELECT * FROM scans WHERE id = ? AND user_id = ?").get(id, req.user.id);
+      
+      if (!scan) {
+        return res.status(404).json({ error: "Scan not found" });
+      }
+
+      // Parse JSON fields
+      const scanResult = {
+        ...scan,
+        yara_matches: scan.yara_matches ? JSON.parse(scan.yara_matches) : [],
+        vt_results: scan.vt_results ? JSON.parse(scan.vt_results) : null,
+        metadata: scan.metadata ? JSON.parse(scan.metadata) : {},
+        contributions: scan.contributions ? JSON.parse(scan.contributions) : {},
+      };
+
+      // Return in the format expected by frontend
+      res.json({
+        id: scan.id,
+        features: {
+          filename: scan.filename,
+          filesize: scan.filesize,
+          hash_sha256: scan.hash_sha256,
+          entropy: scan.entropy,
+          yara_matches: scanResult.yara_matches,
+          metadata: scanResult.metadata,
+          ai_probability: scan.ai_probability,
+          ai_prediction: scan.ai_prediction,
+          headers: {},
+          indicators: [],
+        },
+        report: {
+          score: scan.threat_score,
+          classification: scan.classification,
+          details: [],
+          contributions: scanResult.contributions || { entropy: 0, yara: 0, virusTotal: 0, ai: 0 },
+          explanation: `Classification: ${scan.classification}\nThreat Score: ${scan.threat_score}/100`,
+          safeFileReason: scan.classification === 'Safe' ? 'File identified as safe based on analysis' : null,
+        }
+      });
+    } catch (err) {
+      console.error('Error fetching scan:', err);
+      res.status(500).json({ error: 'Failed to fetch scan' });
+    }
+  });
+
   app.get("/api/stats", authenticate, (req: any, res) => {
     const stats = db.prepare(`
       SELECT 
