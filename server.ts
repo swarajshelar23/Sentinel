@@ -34,6 +34,15 @@ const upload = multer({
   limits: { fileSize: MAX_FILE_SIZE }
 });
 
+function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -119,11 +128,35 @@ async function startServer() {
         db.prepare("UPDATE file_intelligence SET scan_count = scan_count + 1, last_seen = CURRENT_TIMESTAMP WHERE hash_sha256 = ?").run(hash);
         const previousScan = db.prepare("SELECT * FROM scans WHERE hash_sha256 = ? ORDER BY created_at DESC LIMIT 1").get(hash) as any;
         if (previousScan) {
+          const parsedMetadata = safeJsonParse<Record<string, any>>(previousScan.metadata, {});
+          const parsedContributions = safeJsonParse<Record<string, number>>(previousScan.contributions, { entropy: 0, yara: 0, virusTotal: 0, ai: 0 });
+          const parsedYaraMatches = safeJsonParse<string[]>(previousScan.yara_matches, []);
           MonitoringService.logEvent(req.user.id, 'SCAN_CACHE_HIT', `Cache hit for ${hash}`);
+          if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
           return res.json({ 
-            id: previousScan.id, 
-            features: { ...JSON.parse(previousScan.metadata), filename: req.file.originalname, hash_sha256: hash }, 
-            report: { score: previousScan.threat_score, classification: previousScan.classification, contributions: JSON.parse(previousScan.contributions) },
+            id: Number(previousScan.id), 
+            features: {
+              ...parsedMetadata,
+              filename: req.file.originalname,
+              filesize: previousScan.filesize,
+              hash_sha256: hash,
+              entropy: previousScan.entropy,
+              yara_matches: parsedYaraMatches,
+              ai_probability: previousScan.ai_probability,
+              ai_prediction: previousScan.ai_prediction,
+              malware_family: previousScan.malware_family,
+              headers: parsedMetadata.headers || {},
+              indicators: parsedMetadata.indicators || [],
+            }, 
+            report: {
+              score: previousScan.threat_score,
+              classification: previousScan.classification,
+              details: [],
+              contributions: parsedContributions,
+              safeFileReason: previousScan.classification === 'Safe' ? 'File identified as safe based on analysis' : null,
+            },
             cached: true 
           });
         }
@@ -165,7 +198,7 @@ async function startServer() {
       const malwareFamily = intel.find(i => i.family)?.family || (report.score > 80 ? 'Generic.Malware' : null);
 
       // Store in DB
-      const scanId = db.prepare(`
+      const scanIdRaw = db.prepare(`
         INSERT INTO scans (user_id, filename, filesize, hash_sha256, entropy, threat_score, classification, vt_results, yara_matches, metadata, ai_probability, ai_prediction, contributions, malware_family)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -184,6 +217,7 @@ async function startServer() {
         JSON.stringify(report.contributions),
         malwareFamily
       ).lastInsertRowid;
+      const scanId = Number(scanIdRaw);
 
       // Update File Intelligence
       db.prepare(`
@@ -283,15 +317,15 @@ async function startServer() {
       // Parse JSON fields
       const scanResult = {
         ...scan,
-        yara_matches: scan.yara_matches ? JSON.parse(scan.yara_matches) : [],
-        vt_results: scan.vt_results ? JSON.parse(scan.vt_results) : null,
-        metadata: scan.metadata ? JSON.parse(scan.metadata) : {},
-        contributions: scan.contributions ? JSON.parse(scan.contributions) : {},
+        yara_matches: safeJsonParse<string[]>(scan.yara_matches, []),
+        vt_results: safeJsonParse<any>(scan.vt_results, null),
+        metadata: safeJsonParse<Record<string, any>>(scan.metadata, {}),
+        contributions: safeJsonParse<Record<string, number>>(scan.contributions, { entropy: 0, yara: 0, virusTotal: 0, ai: 0 }),
       };
 
       // Return in the format expected by frontend
       res.json({
-        id: scan.id,
+        id: Number(scan.id),
         features: {
           filename: scan.filename,
           filesize: scan.filesize,

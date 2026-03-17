@@ -53,7 +53,10 @@ export default function ScanResult() {
     const fetchScan = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`/api/scans/${id}`);
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`/api/scans/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         setScanData(response.data);
         setError(null);
       } catch (err) {
