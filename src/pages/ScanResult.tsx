@@ -242,6 +242,49 @@ export default function ScanResult() {
               </button>
             </div>
 
+            {/* Structured Classification Explanation */}
+            <div className={`mb-8 p-6 border-l-4 font-sans text-sm leading-relaxed whitespace-pre-wrap ${
+              report.classification === 'Safe' ? 'bg-green-50 border-green-600' : 
+              report.classification === 'Suspicious' ? 'bg-yellow-50 border-yellow-600' : 
+              'bg-red-50 border-red-600'
+            }`}>
+              <div className={`flex items-center gap-2 mb-4 font-mono text-[10px] font-bold uppercase ${
+                report.classification === 'Safe' ? 'text-green-800' : 
+                report.classification === 'Suspicious' ? 'text-yellow-800' : 
+                'text-red-800'
+              }`}>
+                <Info className="w-4 h-4" /> CLASSIFICATION_REASONING
+              </div>
+              <div className={`font-mono text-xs leading-relaxed ${
+                report.classification === 'Safe' ? 'text-green-900' : 
+                report.classification === 'Suspicious' ? 'text-yellow-900' : 
+                'text-red-900'
+              }`}>
+                <div className="mb-3">
+                  <strong>Classification:</strong> {report.classification}
+                </div>
+                <div className="mb-3">
+                  <strong>Threat Score:</strong> {report.score}/100
+                </div>
+                {report.safeFileReason && (
+                  <div className="mb-3">
+                    <strong>Reasoning:</strong><br />
+                    {report.safeFileReason.split('; ').map((reason, idx) => (
+                      <div key={idx} className="ml-4 my-1">✓ {reason}</div>
+                    ))}
+                  </div>
+                )}
+                {!report.safeFileReason && report.details && (
+                  <div className="mb-3">
+                    <strong>Analysis Details:</strong><br />
+                    {report.details.slice(0, 5).map((detail, idx) => (
+                      <div key={idx} className="ml-4 my-1">• {detail}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <AnimatePresence>
               {explanation && (
                 <motion.div 
@@ -310,6 +353,55 @@ export default function ScanResult() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* File Signature Validation Result */}
+            {features.signatureValidation && (
+              <div className="mb-8 p-4 border-l-4 space-y-2" style={{
+                backgroundColor: features.signatureValidation.isValid ? '#f0fdf4' : '#fef2f2',
+                borderColor: features.signatureValidation.isValid ? '#16a34a' : '#dc2626'
+              }}>
+                <h4 className="font-mono font-bold text-xs uppercase flex items-center gap-2" style={{
+                  color: features.signatureValidation.isValid ? '#166534' : '#991b1b'
+                }}>
+                  <FileText className="w-4 h-4" /> FILE_SIGNATURE_VALIDATION
+                </h4>
+                <p className="font-mono text-[10px]" style={{
+                  color: features.signatureValidation.isValid ? '#166534' : '#991b1b'
+                }}>
+                  {features.signatureValidation.isValid ? '✓' : '✗'} {features.signatureValidation.details}
+                </p>
+              </div>
+            )}
+
+            {/* String Analysis Results */}
+            {features.stringAnalysis && features.stringAnalysis.indicatorCount > 0 && (
+              <div className="mb-8 p-4 border-l-4 space-y-3" style={{
+                backgroundColor: features.stringAnalysis.riskFlag ? '#fef2f2' : '#f0fdf4',
+                borderColor: features.stringAnalysis.riskFlag ? '#dc2626' : '#16a34a'
+              }}>
+                <h4 className="font-mono font-bold text-xs uppercase" style={{
+                  color: features.stringAnalysis.riskFlag ? '#991b1b' : '#166534'
+                }}>
+                  SUSPICIOUS_STRING_ANALYSIS
+                </h4>
+                <p className="font-mono text-[10px]" style={{
+                  color: features.stringAnalysis.riskFlag ? '#991b1b' : '#166534'
+                }}>
+                  {features.stringAnalysis.summary}
+                </p>
+                {features.stringAnalysis.suspiciousIndicators && features.stringAnalysis.suspiciousIndicators.length > 0 && (
+                  <div className="space-y-2">
+                    {features.stringAnalysis.suspiciousIndicators.map((indicator: any, i: number) => (
+                      <div key={i} className="ml-4 font-mono text-[9px]" style={{
+                        color: features.stringAnalysis.riskFlag ? '#991b1b' : '#166534'
+                      }}>
+                        <strong>{indicator.category}:</strong> {indicator.keywords.join(', ')} ({indicator.severity})
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

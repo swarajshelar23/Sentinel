@@ -2,6 +2,13 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
+import { 
+  validateFileSignature, 
+  analyzeStrings, 
+  applySafeFileHeuristic, 
+  calibrateProbability,
+  generateClassificationExplanation 
+} from './detection-modules';
 
 export interface ScanFeatures {
   filename: string;
@@ -16,6 +23,9 @@ export interface ScanFeatures {
   headers?: Record<string, any>;
   packer?: string;
   indicators?: string[];
+  signatureValidation?: { isValid: boolean; riskFlag: boolean; details: string };
+  stringAnalysis?: { indicatorCount: number; riskFlag: boolean; summary: string; suspiciousIndicators?: any[] };
+  safeFileHeuristic?: { isSafe: boolean; confidence: number; reasons: string[] };
 }
 
 export interface ScanResult {
@@ -28,6 +38,8 @@ export interface ScanResult {
     virusTotal: number;
     ai: number;
   };
+  explanation?: string;
+  safeFileReason?: string;
 }
 
 /**
@@ -114,15 +126,31 @@ export function isSafeFileType(filename: string): boolean {
 
 /**
  * Identifies suspicious behavior indicators with improved thresholds.
+ * Now integrates enhanced string analysis from detection modules.
  */
 export function getIndicators(features: ScanFeatures, buffer: Buffer, isSafeFile: boolean = false): string[] {
   const indicators: string[] = [];
+  
+  // Use enhanced string analysis from detection modules
+  const stringAnalysis = analyzeStrings(buffer);
+  features.stringAnalysis = {
+    indicatorCount: stringAnalysis.indicatorCount,
+    riskFlag: stringAnalysis.riskFlag,
+    summary: stringAnalysis.summary,
+    suspiciousIndicators: stringAnalysis.suspiciousIndicators
+  };
   
   // For safe file types, only flag extreme indicators
   if (isSafeFile) {
     // Only flag if executable headers are present in documents (highly suspicious)
     if (features.headers?.is_executable) {
       indicators.push('EXECUTABLE_IN_DOCUMENT (Possible Archive or Embedded Malware)');
+    }
+    // For safe files, only add string analysis if risk flag is true
+    if (stringAnalysis.riskFlag) {
+      stringAnalysis.suspiciousIndicators.forEach(ind => {
+        indicators.push(`SUSPICIOUS_STRINGS_${ind.category.toUpperCase()}: ${ind.keywords.join(', ')}`);
+      });
     }
   } else {
     // For executables, apply stricter entropy thresholds
@@ -131,19 +159,17 @@ export function getIndicators(features: ScanFeatures, buffer: Buffer, isSafeFile
     } else if (features.entropy > 7.5 && features.headers?.is_executable) {
       indicators.push('HIGH_ENTROPY_EXECUTABLE (Possible Packing)');
     }
+    
+    // For non-safe files, add all significant string analysis findings
+    if (stringAnalysis.indicatorCount >= 2) {
+      stringAnalysis.suspiciousIndicators.forEach(ind => {
+        indicators.push(`SUSPICIOUS_STRINGS_${ind.category.toUpperCase()}: ${ind.keywords.join(', ')}`);
+      });
+    }
   }
   
   if (features.packer) {
     indicators.push(`PACKED_EXECUTABLE (${features.packer})`);
-  }
-  
-  // Only flag suspicious API imports for executables
-  if (features.headers?.is_executable || features.headers?.type?.includes('Executable')) {
-    const suspiciousStrings = ['CreateRemoteThread', 'WriteProcessMemory', 'OpenProcess', 'ShellExecute', 'HttpOpenRequest'];
-    const foundStrings = extractStrings(buffer).filter(s => suspiciousStrings.some(ss => s.includes(ss)));
-    if (foundStrings.length > 0) {
-      indicators.push(`SUSPICIOUS_API_IMPORTS: ${foundStrings.join(', ')}`);
-    }
   }
 
   return indicators;
@@ -193,8 +219,9 @@ export function scanSignatures(buffer: Buffer): string[] {
 
 /**
  * Calls the Python AI Engine for prediction with improved handling.
+ * Applies probability calibration to prevent overconfident predictions.
  */
-export function getAiPrediction(filePath: string, features: ScanFeatures, vtMaliciousCount: number = 0): { probability: number; prediction: string } {
+export function getAiPrediction(filePath: string, features: ScanFeatures, vtMaliciousCount: number = 0): { probability: number; prediction: string; calibrated?: boolean; explanation?: string } {
   try {
     // For safe file types, apply prior probability reduction
     const isSafeFile = isSafeFileType(features.filename);
@@ -238,11 +265,33 @@ export function getAiPrediction(filePath: string, features: ScanFeatures, vtMali
     const scriptPath = path.resolve('ai-engine', 'predict.py');
     const command = `python3 "${scriptPath}" '${JSON.stringify(pythonFeatures)}'`;
     const output = execSync(command, { encoding: 'utf8' });
-    return JSON.parse(output);
+    let result = JSON.parse(output);
+    
+    // Apply probability calibration
+    const indicatorCount = features.stringAnalysis?.indicatorCount || 0;
+    const safeFileBoost = features.safeFileHeuristic?.isSafe || false;
+    const calibratedProb = calibrateProbability(result.probability, safeFileBoost, indicatorCount);
+    
+    // Determine prediction based on calibrated probability
+    let calibratedPrediction = result.prediction;
+    if (calibratedProb > 0.70) {
+      calibratedPrediction = 'Malicious';
+    } else if (calibratedProb > 0.40) {
+      calibratedPrediction = 'Suspicious';
+    } else {
+      calibratedPrediction = 'Benign';
+    }
+    
+    return { 
+      probability: calibratedProb, 
+      prediction: calibratedPrediction,
+      calibrated: true,
+      explanation: `Raw probability: ${(result.probability * 100).toFixed(1)}% → Calibrated: ${(calibratedProb * 100).toFixed(1)}%`
+    };
   } catch (err) {
     console.error('AI Engine failed, using fallback:', err);
     // For safe file types, return lower default probability
-    return { probability: 0.15, prediction: 'Benign' };
+    return { probability: 0.15, prediction: 'Benign', calibrated: false };
   }
 }
 
@@ -263,11 +312,12 @@ const DEFAULT_WEIGHTS: ScoringConfig = {
 /**
  * Multi-Stage Threat Scoring Engine with Improved Detection Pipeline
  * 
- * Stage 1: File Type Validation - Safe document formats get reduced scores
- * Stage 2: Entropy Analysis - Updated thresholds (< 6.5 normal, 6.5-7.2 suspicious, > 7.2 packed)
- * Stage 3: VirusTotal Confidence - Only mark malware if > 5 engines detect
- * Stage 4: AI Model Threshold - < 0.40 safe, 0.40-0.70 suspicious, > 0.70 malware
- * Stage 5: Combined Threat Score - Weighted combination of all indicators
+ * Stage 1: Safe File Heuristics - Common documents with low risk signals auto-classified as SAFE
+ * Stage 2: File Signature Validation - Detect extension/header mismatches
+ * Stage 3: Entropy Analysis - Updated thresholds (< 6.5 normal, 6.5-7.2 suspicious, > 7.2 packed)
+ * Stage 4: VirusTotal Confidence - Only mark malware if > 5 engines detect
+ * Stage 5: AI Model Threshold - < 0.40 safe, 0.40-0.70 suspicious, > 0.70 malware
+ * Stage 6: Combined Threat Score - Weighted combination of all indicators
  * 
  * Classification Thresholds:
  * 0-30: SAFE
@@ -291,30 +341,50 @@ export function calculateThreatScore(
     ai: 0
   };
 
-  // --- STAGE 1: FILE TYPE VALIDATION ---
-  if (isSafeFileType) {
-    details.push('File type: Common document format (lower risk)');
-    
-    // For safe file types, only proceed if there are strong suspicious indicators
-    const hasSuspiciousIndicators = 
-      features.yara_matches.length > 1 || 
-      (features.headers?.is_executable) || 
-      (features.ai_probability && features.ai_probability > 0.6) ||
-      (vtResults?.data?.attributes?.last_analysis_stats?.malicious > 3);
-    
-    if (!hasSuspiciousIndicators) {
-      // No strong indicators - mark as safe
-      details.push('No strong malicious indicators detected');
-      return {
-        score: 5,
-        classification: 'Safe',
-        details,
-        contributions
-      };
-    }
+  // --- STAGE 1: SAFE FILE HEURISTICS ---
+  // Check if file can be automatically classified as SAFE
+  const vtMaliciousCount = vtResults?.data?.attributes?.last_analysis_stats?.malicious || 0;
+  const safeFileHeuristic = applySafeFileHeuristic(
+    features.filename,
+    features.entropy,
+    vtMaliciousCount,
+    features.yara_matches
+  );
+  features.safeFileHeuristic = safeFileHeuristic;
+  
+  if (safeFileHeuristic.isSafe) {
+    details.push('Safe File Classification: Common document format with no suspicious signals');
+    safeFileHeuristic.reasons.forEach(reason => details.push(`  ✓ ${reason}`));
+    return {
+      score: 0,
+      classification: 'Safe',
+      details,
+      contributions,
+      explanation: generateClassificationExplanation('Safe', 0, safeFileHeuristic.reasons),
+      safeFileReason: safeFileHeuristic.reasons.join('; ')
+    };
   }
 
-  // --- STAGE 2: ENTROPY ANALYSIS THRESHOLD ---
+  // If safe file heuristic failed but file is safe type, add the reasons as details
+  if (isSafeFileType && safeFileHeuristic.reasons.length > 0) {
+    details.push('File type: Common document format (lower risk)');
+    safeFileHeuristic.reasons.forEach(reason => details.push(`  ✓ ${reason}`));
+  }
+
+  // --- STAGE 2: FILE SIGNATURE VALIDATION ---
+  const signatureValidation = validateFileSignature(features.filename);
+  features.signatureValidation = signatureValidation;
+  
+  if (!signatureValidation.isValid) {
+    const weight = 25;
+    score += weight;
+    contributions.entropy += weight;
+    details.push(`File Signature Mismatch: ${signatureValidation.details} (${weight}pts) - SUSPICIOUS`);
+  } else {
+    details.push(`File Signature: Valid - ${signatureValidation.actualType || 'format recognized'}`);
+  }
+
+  // --- STAGE 3: ENTROPY ANALYSIS THRESHOLD ---
   if (features.entropy > 7.2) {
     // Only applies significant penalty for executables with extreme entropy
     if (features.headers?.is_executable) {
@@ -339,7 +409,7 @@ export function calculateThreatScore(
     details.push(`Low entropy (${Math.round(features.entropy * 100) / 100}) - typical for compressed/normal files`);
   }
 
-  // --- STAGE 3: VIRUSTOTAL CONFIDENCE ---
+  // --- STAGE 4: VIRUSTOTAL CONFIDENCE ---
   if (vtResults) {
     const maliciousCount = vtResults.data?.attributes?.last_analysis_stats?.malicious || 0;
     
@@ -361,27 +431,27 @@ export function calculateThreatScore(
     }
   }
 
-  // --- STAGE 4: AI MODEL THRESHOLD ---
+  // --- STAGE 5: AI MODEL THRESHOLD WITH CALIBRATION ---
   if (features.ai_probability !== undefined) {
     if (features.ai_probability > 0.70) {
       // High probability of malware (> 0.70)
       const weight = Math.round(features.ai_probability * 35);
       score += weight;
       contributions.ai = weight;
-      details.push(`AI Model: ${Math.round(features.ai_probability * 100)}% malware probability - high confidence (${weight}pts)`);
+      details.push(`AI Model: ${Math.round(features.ai_probability * 100)}% malware probability (calibrated) - high confidence (${weight}pts)`);
     } else if (features.ai_probability > 0.40) {
       // Suspicious (0.40 - 0.70)
       const weight = Math.round(features.ai_probability * 20);
       score += weight;
       contributions.ai = weight;
-      details.push(`AI Model: ${Math.round(features.ai_probability * 100)}% malware probability - suspicious (${weight}pts)`);
+      details.push(`AI Model: ${Math.round(features.ai_probability * 100)}% malware probability (calibrated) - suspicious (${weight}pts)`);
     } else {
       // Safe (< 0.40)
-      details.push(`AI Model: ${Math.round(features.ai_probability * 100)}% malware probability - likely safe`);
+      details.push(`AI Model: ${Math.round(features.ai_probability * 100)}% malware probability (calibrated) - likely safe`);
     }
   }
 
-  // --- STAGE 5: YARA SIGNATURE MATCHING ---
+  // --- STAGE 6: YARA SIGNATURE MATCHING ---
   if (features.yara_matches.length > 0) {
     // Only high-confidence signatures count significantly
     const highConfidenceSigs = features.yara_matches.filter(sig => 
@@ -412,7 +482,17 @@ export function calculateThreatScore(
     classification = 'Suspicious';
   }
 
-  return { score, classification, details, contributions };
+  // Generate structured explanation
+  const explanation = generateClassificationExplanation(classification, score, details);
+
+  return { 
+    score, 
+    classification, 
+    details, 
+    contributions,
+    explanation,
+    safeFileReason: classification === 'Safe' ? details.join('; ') : undefined
+  };
 }
 
 export async function performScan(filePath: string, filename: string): Promise<ScanFeatures> {
@@ -438,6 +518,11 @@ export async function performScan(filePath: string, filename: string): Promise<S
   features.strings = extractStrings(buffer);
   features.packer = detectPacker(buffer) || undefined;
   features.headers = analyzeHeaders(buffer);
+  
+  // Run enhanced detection modules
+  features.signatureValidation = validateFileSignature(filePath);
+  features.stringAnalysis = analyzeStrings(buffer);
+  
   features.indicators = getIndicators(features, buffer, isSafeFile);
   features.metadata.magic = features.headers.magic;
 
