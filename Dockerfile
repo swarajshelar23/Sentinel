@@ -27,6 +27,9 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 # Copy the rest of the application
 COPY . .
 
+# Ensure native modules are compiled for Linux inside the container
+RUN npm rebuild better-sqlite3 --build-from-source
+
 # Build the frontend
 RUN npm run build
 
