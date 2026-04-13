@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import path from 'path';
 import { 
   validateFileSignature, 
@@ -40,6 +40,69 @@ export interface ScanResult {
   };
   explanation?: string;
   safeFileReason?: string;
+}
+
+type PythonRunner = {
+  command: string;
+  prefixArgs: string[];
+};
+
+let cachedPythonRunner: PythonRunner | null | undefined;
+
+function resolvePythonRunner(): PythonRunner | null {
+  if (cachedPythonRunner !== undefined) {
+    return cachedPythonRunner;
+  }
+
+  const candidates: PythonRunner[] = process.platform === 'win32'
+    ? [
+        { command: 'py', prefixArgs: ['-3'] },
+        { command: 'python', prefixArgs: [] },
+        { command: 'python3', prefixArgs: [] }
+      ]
+    : [
+        { command: 'python3', prefixArgs: [] },
+        { command: 'python', prefixArgs: [] }
+      ];
+
+  for (const candidate of candidates) {
+    const probe = spawnSync(candidate.command, [...candidate.prefixArgs, '--version'], {
+      encoding: 'utf8'
+    });
+
+    if (probe.status === 0) {
+      cachedPythonRunner = candidate;
+      return cachedPythonRunner;
+    }
+  }
+
+  cachedPythonRunner = null;
+  return cachedPythonRunner;
+}
+
+function runAiPredictionScript(scriptPath: string, features: Record<string, number>): string {
+  const runner = resolvePythonRunner();
+
+  if (!runner) {
+    throw new Error('No Python interpreter found. Install Python or the Python Launcher (py).');
+  }
+
+  const result = spawnSync(
+    runner.command,
+    [...runner.prefixArgs, scriptPath, JSON.stringify(features)],
+    { encoding: 'utf8' }
+  );
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    const errorOutput = (result.stderr || result.stdout || 'Unknown error').trim();
+    throw new Error(`AI engine process failed (${runner.command}): ${errorOutput}`);
+  }
+
+  return (result.stdout || '').trim();
 }
 
 /**
@@ -263,8 +326,7 @@ export function getAiPrediction(filePath: string, features: ScanFeatures, vtMali
     };
 
     const scriptPath = path.resolve('ai-engine', 'predict.py');
-    const command = `python3 "${scriptPath}" '${JSON.stringify(pythonFeatures)}'`;
-    const output = execSync(command, { encoding: 'utf8' });
+    const output = runAiPredictionScript(scriptPath, pythonFeatures);
     let result = JSON.parse(output);
     
     // Apply probability calibration
