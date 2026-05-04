@@ -15,10 +15,9 @@ export default function Analytics() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('token');
         const [dashRes, accRes] = await Promise.all([
-          axios.get('/api/analytics/dashboard', { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get('/api/analytics/ai-accuracy', { headers: { Authorization: `Bearer ${token}` } })
+          axios.get('/api/analytics/dashboard'),
+          axios.get('/api/analytics/ai-accuracy')
         ]);
         setData(dashRes.data);
         setAccuracy(accRes.data);

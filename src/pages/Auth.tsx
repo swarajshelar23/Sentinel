@@ -20,13 +20,11 @@ export default function Auth({ onLogin }: { onLogin: (user: any) => void }) {
       const { data } = await axios.post(endpoint, { username, password });
       
       if (isLogin) {
-        localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         onLogin(data.user);
       } else {
         // Auto-login after registration
         const loginRes = await axios.post('/api/auth/login', { username, password });
-        localStorage.setItem('token', loginRes.data.token);
         localStorage.setItem('user', JSON.stringify(loginRes.data.user));
         onLogin(loginRes.data.user);
       }

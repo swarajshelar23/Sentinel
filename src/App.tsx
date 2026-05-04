@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Navbar from './components/Navbar';
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
@@ -15,8 +16,7 @@ export default function App() {
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
-    if (storedUser && token) {
+    if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
     setLoading(false);
@@ -31,9 +31,13 @@ export default function App() {
     }
   }, [user]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await axios.post('/api/auth/logout');
+    } catch {
+      // Ignore logout request errors and clear local state anyway.
+    }
     localStorage.removeItem('user');
-    localStorage.removeItem('token');
     setUser(null);
   };
 

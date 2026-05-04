@@ -34,6 +34,28 @@ const upload = multer({
   limits: { fileSize: MAX_FILE_SIZE }
 });
 
+const AUTH_COOKIE_NAME = "authToken";
+const AUTH_TOKEN_MAX_AGE_MS = 15 * 60 * 1000;
+
+function getTokenFromRequest(req: any): string | null {
+  const bearerToken = req.headers.authorization?.split(" ")[1];
+  if (bearerToken) return bearerToken;
+
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+
+  const cookies = cookieHeader.split(";");
+  for (const cookie of cookies) {
+    const [rawName, ...rawValueParts] = cookie.trim().split("=");
+    if (rawName === AUTH_COOKIE_NAME) {
+      const rawValue = rawValueParts.join("=");
+      return decodeURIComponent(rawValue);
+    }
+  }
+
+  return null;
+}
+
 function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -62,7 +84,7 @@ async function startServer() {
 
   // --- Auth Middleware ---
   const authenticate = (req: any, res: any, next: any) => {
-    const token = req.headers.authorization?.split(" ")[1];
+    const token = getTokenFromRequest(req);
     if (!token) {
       console.warn("Auth failed: No token provided");
       return res.status(401).json({ error: "Unauthorized" });
@@ -109,9 +131,30 @@ async function startServer() {
       MonitoringService.logEvent(null, 'LOGIN_FAILED', `Failed login attempt for ${username}`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET);
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: AUTH_TOKEN_MAX_AGE_MS,
+      path: "/",
+    });
     MonitoringService.logEvent(user.id, 'LOGIN_SUCCESS', `User ${username} logged in`);
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+    res.json({ user: { id: user.id, username: user.username, role: user.role } });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    res.clearCookie(AUTH_COOKIE_NAME, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+    });
+    res.json({ success: true });
   });
 
   // --- Scanner Routes ---

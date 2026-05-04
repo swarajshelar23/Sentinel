@@ -16,11 +16,10 @@ export default function Admin() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('token');
         const [logsRes, scansRes, healthRes] = await Promise.all([
-          axios.get('/api/admin/logs', { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get('/api/admin/scans', { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get('/api/admin/health', { headers: { Authorization: `Bearer ${token}` } })
+          axios.get('/api/admin/logs'),
+          axios.get('/api/admin/scans'),
+          axios.get('/api/admin/health')
         ]);
         setLogs(logsRes.data);
         setScans(scansRes.data);

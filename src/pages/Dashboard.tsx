@@ -25,15 +25,11 @@ export default function Dashboard() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const { data } = await axios.get('/api/analytics/dashboard', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const { data } = await axios.get('/api/analytics/dashboard');
       setStats(data);
     } catch (err: any) {
       console.error('Failed to fetch stats:', err.response?.data || err.message);
       if (err.response?.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/auth';
       }
@@ -42,10 +38,7 @@ export default function Dashboard() {
 
   const fetchQueue = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const { data } = await axios.get('/api/scan/queue', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const { data } = await axios.get('/api/scan/queue');
       if (Array.isArray(data)) {
         setQueue(data);
       } else {
@@ -55,7 +48,6 @@ export default function Dashboard() {
       console.error('Failed to fetch queue:', err.response?.data || err.message);
       setQueue([]);
       if (err.response?.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/auth';
       }
@@ -78,13 +70,11 @@ export default function Dashboard() {
     files.forEach(f => formData.append('files', f));
 
     try {
-      const token = localStorage.getItem('token');
       if (files.length === 1) {
         const singleFormData = new FormData();
         singleFormData.append('file', files[0]);
         const { data } = await axios.post('/api/scan', singleFormData, {
           headers: { 
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         });
@@ -92,7 +82,6 @@ export default function Dashboard() {
       } else {
         await axios.post('/api/scan/batch', formData, {
           headers: { 
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         });

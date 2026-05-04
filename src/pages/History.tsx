@@ -12,10 +12,7 @@ export default function History() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const { data } = await axios.get('/api/history', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const { data } = await axios.get('/api/history');
         setScans(data);
       } catch (err) {
         console.error('Failed to fetch history');
