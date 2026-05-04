@@ -22,39 +22,17 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh 'npm ci'
-                    } else {
-                        bat 'npm ci'
-                    }
+        stage('Node Build') {
+            agent {
+                docker {
+                    image 'node:20-slim'
+                    reuseNode true
                 }
             }
-        }
-
-        stage('Type Check') {
             steps {
-                script {
-                    if (isUnix()) {
-                        sh 'npm run lint'
-                    } else {
-                        bat 'npm run lint'
-                    }
-                }
-            }
-        }
-
-        stage('Build') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh 'npm run build'
-                    } else {
-                        bat 'npm run build'
-                    }
-                }
+                sh 'npm ci'
+                sh 'npm run lint'
+                sh 'npm run build'
             }
         }
 
