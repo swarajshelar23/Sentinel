@@ -29,8 +29,12 @@ pipeline {
                     reuseNode true
                 }
             }
+            environment {
+                NODE_ENV = 'development'
+                NPM_CONFIG_PRODUCTION = 'false'
+            }
             steps {
-                sh 'npm ci'
+                sh 'npm ci --include=dev'
                 sh 'npm run lint'
                 sh 'npm run build'
             }
